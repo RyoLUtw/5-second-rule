@@ -1,1 +1,860 @@
-﻿
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>5 Second Rule Trainer</title>
+  <style>
+    :root {
+      --bg: #f7f7fb;
+      --card: #ffffff;
+      --primary: #5a67d8;
+      --primary-dark: #434190;
+      --accent: #48bb78;
+      --danger: #e53e3e;
+      --text: #2d3748;
+      --muted: #718096;
+      --border: #e2e8f0;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    header {
+      background: #fff;
+      border-bottom: 1px solid var(--border);
+      padding: 12px 16px;
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+    .tab-btn {
+      padding: 10px 14px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: #f8fafc;
+      cursor: pointer;
+      transition: background 0.2s, color 0.2s, border 0.2s;
+    }
+    .tab-btn.active {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary);
+    }
+    .container {
+      max-width: 1100px;
+      margin: 16px auto 32px;
+      padding: 0 12px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+      margin-bottom: 16px;
+    }
+    h1, h2, h3, h4 {
+      margin: 0 0 8px;
+      color: var(--text);
+    }
+    p { margin: 4px 0 8px; color: var(--muted); }
+    label { font-weight: 600; }
+    input[type="text"], select, textarea {
+      width: 100%;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      margin: 4px 0 8px;
+      font-size: 14px;
+    }
+    textarea { min-height: 160px; }
+    button {
+      padding: 10px 14px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: transform 0.1s, box-shadow 0.1s, background 0.2s;
+    }
+    button:active { transform: translateY(1px); }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-primary:hover { background: var(--primary-dark); }
+    .btn-ghost { background: #f8fafc; color: var(--text); border: 1px solid var(--border); }
+    .btn-danger { background: #fff5f5; color: var(--danger); border: 1px solid #fed7d7; }
+    .btn-accent { background: var(--accent); color: #fff; }
+    .flex { display: flex; align-items: center; gap: 8px; }
+    .flex-wrap { flex-wrap: wrap; }
+    .between { justify-content: space-between; }
+    .grid { display: grid; gap: 12px; }
+    .set-card { border: 1px solid var(--border); border-radius: 12px; padding: 12px; background: #fff; }
+    .set-header { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+    .item-row { border: 1px dashed var(--border); padding: 10px; border-radius: 10px; margin: 8px 0; background: #fdfdfd; }
+    .small { color: var(--muted); font-size: 13px; }
+    .hidden { display: none; }
+    .pill { padding: 4px 8px; border-radius: 999px; background: #edf2f7; color: var(--muted); font-size: 12px; }
+    .mode-toggle button { border: 1px solid var(--border); background: #f8fafc; }
+    .mode-toggle button.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .timer {
+      font-size: 48px;
+      text-align: center;
+      margin: 12px 0;
+      color: var(--primary-dark);
+      font-weight: 700;
+    }
+    .progress {
+      background: #e2e8f0;
+      border-radius: 10px;
+      height: 12px;
+      overflow: hidden;
+    }
+    .progress-inner {
+      background: var(--primary);
+      width: 100%;
+      height: 100%;
+      transition: width 0.1s linear;
+    }
+    .state-block { text-align: center; }
+    .selection-group { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+    .selection-group button { min-width: 80px; }
+    .disabled { opacity: 0.6; pointer-events: none; }
+    .hearts { font-size: 22px; }
+    .tag { background: #f1f5f9; padding: 4px 8px; border-radius: 8px; margin: 0 4px; font-size: 12px; display: inline-block; }
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+    }
+    .modal { background: #fff; border-radius: 12px; padding: 16px; width: min(640px, 94vw); box-shadow: 0 8px 24px rgba(0,0,0,0.2); }
+    @media (max-width: 720px) {
+      header { position: sticky; top: 0; }
+      .set-header { flex-direction: column; align-items: flex-start; }
+      button, input, select { width: 100%; }
+      .selection-group { flex-direction: column; align-items: stretch; }
+      .mode-toggle { width: 100%; }
+      .mode-toggle button { flex: 1; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <button class="tab-btn active" id="tab-manage">Study Sets</button>
+    <button class="tab-btn" id="tab-game">Game</button>
+    <div class="pill">Single HTML • No backend</div>
+  </header>
+
+  <div class="container">
+    <section id="manage-page" class="card">
+      <div class="flex between flex-wrap">
+        <div>
+          <h2>Study Set Management</h2>
+          <p>Build vocabulary practice sets, import from JSON, or back them up.</p>
+        </div>
+        <div class="flex flex-wrap">
+          <button class="btn-primary" id="btn-new-set">New Set</button>
+          <button class="btn-ghost" id="btn-import">Import JSON</button>
+          <button class="btn-ghost" id="btn-save-local">Save sets locally</button>
+          <button class="btn-ghost" id="btn-download">Download sets as JSON</button>
+        </div>
+      </div>
+
+      <div class="card" id="drive-card">
+        <h3>Cloud Backup</h3>
+        <p class="small">Save a copy to your Google Drive using your own OAuth Client ID.</p>
+        <label for="client-id">Google OAuth Client ID</label>
+        <input type="text" id="client-id" placeholder="Paste your OAuth Client ID here">
+        <div class="flex flex-wrap">
+          <button class="btn-primary" id="btn-drive-save">Save sets to Google Drive</button>
+          <button class="btn-ghost" id="btn-download-dup">Download sets as JSON</button>
+        </div>
+        <div class="small" id="drive-msg"></div>
+      </div>
+
+      <div id="sets-list" class="grid"></div>
+    </section>
+
+    <section id="game-page" class="card hidden">
+      <div class="flex between flex-wrap">
+        <div>
+          <h2>Game</h2>
+          <p>Pick a study set and difficulty, then choose your mode.</p>
+        </div>
+        <div class="flex flex-wrap mode-toggle">
+          <button id="mode-survival" class="tab-btn">Mode 1 – Survival</button>
+          <button id="mode-endless" class="tab-btn">Mode 3 – Endless Streak</button>
+        </div>
+      </div>
+
+      <div class="grid" style="grid-template-columns: repeat(auto-fit,minmax(260px,1fr));">
+        <div class="card">
+          <label for="set-select">Active Study Set</label>
+          <select id="set-select"></select>
+          <div class="small" id="set-hint"></div>
+        </div>
+        <div class="card">
+          <h4>Difficulty</h4>
+          <div class="selection-group" id="difficulty-group">
+            <label><input type="radio" name="difficulty" value="easy"> Easy</label>
+            <label><input type="radio" name="difficulty" value="medium" checked> Medium</label>
+            <label><input type="radio" name="difficulty" value="hard"> Hard</label>
+          </div>
+          <div class="small">Base points per correct answer: Easy 1 · Medium 2 · Hard 3.</div>
+        </div>
+        <div class="card">
+          <h4>Best Records</h4>
+          <div id="best-survival" class="small">Survival best score: 0</div>
+          <div id="best-endless" class="small">Endless best streak: 0 · Best score: 0</div>
+        </div>
+      </div>
+
+      <div class="card" id="game-area">
+        <div id="state-idle" class="state-block">
+          <p>Select mode, difficulty, and study set to begin.</p>
+          <button class="btn-primary" id="btn-start">Start Game</button>
+        </div>
+
+        <div id="state-prompt" class="hidden">
+          <div class="hearts" id="lives-display"></div>
+          <div class="tag" id="tag-mode"></div>
+          <div class="tag" id="tag-difficulty"></div>
+          <h3 id="prompt-text">Prompt goes here</h3>
+          <div class="small" id="target-hint"></div>
+          <div class="timer" id="timer">5</div>
+          <div class="progress"><div class="progress-inner" id="progress-inner"></div></div>
+          <div class="selection-group" style="margin-top:12px;">
+            <button class="btn-primary" id="btn-done">Done</button>
+            <button class="btn-danger" id="btn-end">End Run</button>
+          </div>
+        </div>
+
+        <div id="state-eval" class="hidden">
+          <div class="tag" id="eval-mode"></div>
+          <div class="tag" id="eval-difficulty"></div>
+          <h3 id="eval-prompt"></h3>
+          <p class="small" id="eval-targets"></p>
+          <h4>How did it go?</h4>
+          <div class="selection-group" id="performance-group">
+            <button data-perf="nailed" class="btn-primary">Nailed it</button>
+            <button data-perf="almost" class="btn-ghost">Almost</button>
+            <button data-perf="freeze" class="btn-danger">Brain freeze</button>
+          </div>
+          <h4>Target vocabulary used?</h4>
+          <div class="selection-group" id="target-group">
+            <button data-target="0" class="btn-ghost">0</button>
+            <button data-target="1" class="btn-ghost">1</button>
+            <button data-target="2" class="btn-ghost">2</button>
+            <button data-target="3" class="btn-ghost">3+</button>
+          </div>
+          <div id="score-breakdown" class="card" style="margin-top:12px; text-align:left;"></div>
+          <button class="btn-accent" id="btn-confirm" disabled>Confirm & Next</button>
+        </div>
+
+        <div id="state-over" class="hidden">
+          <h3 id="over-title">Run complete</h3>
+          <div id="over-details" class="small"></div>
+          <div class="selection-group" style="margin-top:12px;">
+            <button class="btn-primary" id="btn-play-again">Play again (same mode)</button>
+            <button class="btn-ghost" id="btn-back">Back to Game Menu</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Import Modal -->
+  <div id="import-modal" class="modal-backdrop hidden">
+    <div class="modal">
+      <h3>Import Study Sets from JSON</h3>
+      <p class="small">Paste an array of study sets with <code>name</code> and <code>items</code> (each item has <code>prompt</code> and <code>targetWords</code> array).</p>
+      <textarea id="import-text"></textarea>
+      <div class="small" id="import-error" style="color:var(--danger);"></div>
+      <div class="flex between">
+        <button class="btn-primary" id="btn-import-confirm">Import</button>
+        <button class="btn-ghost" id="btn-import-cancel">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ---------------------------
+    // Storage helpers and defaults
+    // ---------------------------
+    const STORAGE_KEYS = {
+      sets: 'fiveSecondStudySets',
+      bestSurvival: 'fiveSecondBestScoreSurvival',
+      bestEndlessScore: 'fiveSecondBestScoreEndless',
+      bestEndlessStreak: 'fiveSecondBestStreakEndless',
+      lastSet: 'fiveSecondLastStudySetName',
+      lastDifficulty: 'fiveSecondLastDifficulty'
+    };
+
+    const defaultSets = [
+      {
+        name: 'Fruits & Food',
+        items: [
+          { prompt: 'Name 3 fruits', targetWords: ['tropical', 'juicy', 'citrus'] },
+          { prompt: 'Name 3 green vegetables', targetWords: ['leafy', 'crunchy', 'bitter'] },
+          { prompt: 'Name 3 dairy products', targetWords: ['creamy', 'fermented', 'pasteurized'] }
+        ]
+      },
+      {
+        name: 'Daily Routines',
+        items: [
+          { prompt: 'Name 3 things you do in the morning', targetWords: ['routine', 'habit', 'prepare'] },
+          { prompt: 'Name 3 things you do before bed', targetWords: ['relax', 'unwind', 'brush'] }
+        ]
+      }
+    ];
+
+    let studySets = [];
+    let currentMode = null; // 'survival' | 'endless'
+    let currentRun = null;   // Tracks the current session data
+    let timerInterval = null;
+    let timerStart = null;
+    const TIMER_DURATION = 5000; // 5 seconds in ms
+
+    // Load study sets or use defaults
+    function loadStudySets() {
+      const saved = localStorage.getItem(STORAGE_KEYS.sets);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) {
+            studySets = parsed;
+            return;
+          }
+        } catch (e) {
+          console.warn('Failed to parse saved sets, using defaults', e);
+        }
+      }
+      studySets = defaultSets;
+    }
+
+    function saveStudySets() {
+      localStorage.setItem(STORAGE_KEYS.sets, JSON.stringify(studySets));
+    }
+
+    function loadBestScores() {
+      return {
+        survival: Number(localStorage.getItem(STORAGE_KEYS.bestSurvival) || 0),
+        endlessScore: Number(localStorage.getItem(STORAGE_KEYS.bestEndlessScore) || 0),
+        endlessStreak: Number(localStorage.getItem(STORAGE_KEYS.bestEndlessStreak) || 0)
+      };
+    }
+
+    function updateBestScores({ survival, endlessScore, endlessStreak }) {
+      if (survival !== undefined) localStorage.setItem(STORAGE_KEYS.bestSurvival, String(survival));
+      if (endlessScore !== undefined) localStorage.setItem(STORAGE_KEYS.bestEndlessScore, String(endlessScore));
+      if (endlessStreak !== undefined) localStorage.setItem(STORAGE_KEYS.bestEndlessStreak, String(endlessStreak));
+      renderBestStats();
+    }
+
+    function getLastStudySetName() { return localStorage.getItem(STORAGE_KEYS.lastSet); }
+    function setLastStudySetName(name) { localStorage.setItem(STORAGE_KEYS.lastSet, name); }
+
+    function getLastDifficulty() { return localStorage.getItem(STORAGE_KEYS.lastDifficulty); }
+    function setLastDifficulty(diff) { localStorage.setItem(STORAGE_KEYS.lastDifficulty, diff); }
+
+    // ---------------------------
+    // Rendering helpers
+    // ---------------------------
+    function renderStudySets() {
+      const list = document.getElementById('sets-list');
+      list.innerHTML = '';
+      if (!studySets.length) {
+        list.innerHTML = '<p>No sets yet. Create a new one or import JSON.</p>';
+        return;
+      }
+      studySets.forEach((set, setIndex) => {
+        const card = document.createElement('div');
+        card.className = 'set-card';
+        card.innerHTML = `
+          <div class="set-header">
+            <input type="text" value="${set.name}" aria-label="Set name" />
+            <span class="small">${set.items.length} items</span>
+            <button class="btn-danger">Delete set</button>
+          </div>
+          <div class="set-body"></div>
+          <button class="btn-ghost">Add item</button>
+        `;
+
+        const nameInput = card.querySelector('input');
+        nameInput.addEventListener('input', (e) => {
+          set.name = e.target.value || 'Untitled set';
+          renderSetSelect();
+        });
+
+        const deleteBtn = card.querySelector('.btn-danger');
+        deleteBtn.addEventListener('click', () => {
+          if (confirm('Delete this set?')) {
+            studySets.splice(setIndex, 1);
+            renderStudySets();
+            renderSetSelect();
+          }
+        });
+
+        const body = card.querySelector('.set-body');
+        set.items.forEach((item, itemIndex) => {
+          body.appendChild(renderItemRow(set, item, itemIndex));
+        });
+
+        const addBtn = card.querySelector('.btn-ghost');
+        addBtn.addEventListener('click', () => {
+          const newItem = { prompt: '', targetWords: [] };
+          set.items.push(newItem);
+          body.appendChild(renderItemRow(set, newItem, set.items.length - 1));
+        });
+
+        list.appendChild(card);
+      });
+    }
+
+    function renderItemRow(set, item, itemIndex) {
+      const row = document.createElement('div');
+      row.className = 'item-row';
+      row.innerHTML = `
+        <label>Prompt</label>
+        <input type="text" value="${item.prompt}" placeholder="Name 3..." />
+        <label>Target words (comma separated)</label>
+        <input type="text" value="${item.targetWords.join(', ')}" placeholder="tropical, juicy, citrus" />
+        <button class="btn-danger">Delete item</button>
+      `;
+      const [promptInput, targetInput] = row.querySelectorAll('input');
+      promptInput.addEventListener('input', (e) => { item.prompt = e.target.value; });
+      targetInput.addEventListener('input', (e) => {
+        item.targetWords = e.target.value.split(',').map(w => w.trim()).filter(Boolean);
+      });
+      const del = row.querySelector('button');
+      del.addEventListener('click', () => {
+        set.items.splice(itemIndex, 1);
+        renderStudySets();
+        renderSetSelect();
+      });
+      return row;
+    }
+
+    function renderSetSelect() {
+      const select = document.getElementById('set-select');
+      const hint = document.getElementById('set-hint');
+      select.innerHTML = '';
+      if (!studySets.length) {
+        select.disabled = true;
+        hint.textContent = 'No study sets available. Create or import one first.';
+        return;
+      }
+      select.disabled = false;
+      studySets.forEach((set) => {
+        const opt = document.createElement('option');
+        opt.value = set.name;
+        opt.textContent = `${set.name} (${set.items.length} items)`;
+        select.appendChild(opt);
+      });
+      const last = getLastStudySetName();
+      if (last && studySets.some(s => s.name === last)) {
+        select.value = last;
+      }
+      hint.textContent = 'Selected set will be used for prompts.';
+    }
+
+    function renderBestStats() {
+      const best = loadBestScores();
+      document.getElementById('best-survival').textContent = `Survival best score: ${best.survival}`;
+      document.getElementById('best-endless').textContent = `Endless best streak: ${best.endlessStreak} · Best score: ${best.endlessScore}`;
+    }
+
+    // ---------------------------
+    // Import / Export helpers
+    // ---------------------------
+    function downloadSets() {
+      const blob = new Blob([JSON.stringify(studySets, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'study_sets.json';
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function validateImportedSets(data) {
+      if (!Array.isArray(data)) return false;
+      return data.every(set => set && typeof set.name === 'string' && Array.isArray(set.items) && set.items.every(item => item && typeof item.prompt === 'string' && Array.isArray(item.targetWords)));
+    }
+
+    function openImportModal() {
+      document.getElementById('import-modal').classList.remove('hidden');
+      document.getElementById('import-text').value = '';
+      document.getElementById('import-error').textContent = '';
+    }
+
+    function closeImportModal() {
+      document.getElementById('import-modal').classList.add('hidden');
+    }
+
+    function handleImport() {
+      const text = document.getElementById('import-text').value;
+      const error = document.getElementById('import-error');
+      try {
+        const parsed = JSON.parse(text);
+        if (!validateImportedSets(parsed)) {
+          error.textContent = 'Invalid format. Ensure it is an array of sets with name, items, and targetWords arrays.';
+          return;
+        }
+        studySets = parsed;
+        renderStudySets();
+        renderSetSelect();
+        saveStudySets();
+        closeImportModal();
+      } catch (e) {
+        error.textContent = 'JSON parse error: ' + e.message;
+      }
+    }
+
+    // ---------------------------
+    // Mode selection and tabs
+    // ---------------------------
+    function switchTab(target) {
+      document.getElementById('manage-page').classList.toggle('hidden', target !== 'manage');
+      document.getElementById('game-page').classList.toggle('hidden', target !== 'game');
+      document.getElementById('tab-manage').classList.toggle('active', target === 'manage');
+      document.getElementById('tab-game').classList.toggle('active', target === 'game');
+    }
+
+    function setMode(mode) {
+      currentMode = mode;
+      document.getElementById('mode-survival').classList.toggle('active', mode === 'survival');
+      document.getElementById('mode-endless').classList.toggle('active', mode === 'endless');
+      updateTags();
+    }
+
+    // ---------------------------
+    // Game flow helpers
+    // ---------------------------
+    function getSelectedDifficulty() {
+      const checked = document.querySelector('input[name="difficulty"]:checked');
+      return checked ? checked.value : 'medium';
+    }
+
+    function difficultyMultiplier(diff) {
+      return diff === 'easy' ? 1 : diff === 'hard' ? 3 : 2;
+    }
+
+    function performanceToCorrect(perf) {
+      if (perf === 'nailed') return 3;
+      if (perf === 'almost') return 2;
+      return 0;
+    }
+
+    function renderHearts(lives) {
+      let display = '';
+      for (let i = 0; i < 3; i += 0.5) {
+        if (lives - i >= 0.5) display += '❤'; else display += '♡';
+      }
+      return display;
+    }
+
+    function startGame() {
+      if (!currentMode) {
+        alert('Please choose a mode first.');
+        return;
+      }
+      if (!studySets.length) {
+        alert('Please create or import a study set first.');
+        return;
+      }
+      const setName = document.getElementById('set-select').value;
+      const set = studySets.find(s => s.name === setName);
+      if (!set || !set.items.length) {
+        alert('Selected set has no items.');
+        return;
+      }
+      const difficulty = getSelectedDifficulty();
+      setLastDifficulty(difficulty);
+      setLastStudySetName(setName);
+      currentRun = {
+        mode: currentMode,
+        setName,
+        setItems: set.items,
+        difficulty,
+        lives: currentMode === 'survival' ? 3 : null,
+        score: 0,
+        streak: 0,
+        rounds: 0,
+        lastIndex: -1
+      };
+      goToPrompt();
+    }
+
+    function goToPrompt() {
+      if (!currentRun) return;
+      const { setItems, lastIndex } = currentRun;
+      if (!setItems.length) return;
+      let idx = Math.floor(Math.random() * setItems.length);
+      if (setItems.length > 1 && idx === lastIndex) {
+        idx = (idx + 1) % setItems.length;
+      }
+      currentRun.lastIndex = idx;
+      const item = setItems[idx];
+      document.getElementById('prompt-text').textContent = item.prompt || 'Unnamed prompt';
+      document.getElementById('target-hint').textContent = item.targetWords.length ? `Target words: ${item.targetWords.join(', ')}` : 'Target words: none provided';
+      document.getElementById('eval-prompt').textContent = item.prompt || 'Unnamed prompt';
+      document.getElementById('eval-targets').textContent = document.getElementById('target-hint').textContent;
+      clearSelections();
+      switchState('prompt');
+      startTimer();
+    }
+
+    function switchState(state) {
+      ['state-idle','state-prompt','state-eval','state-over'].forEach(id => {
+        document.getElementById(id).classList.toggle('hidden', id !== `state-${state}`);
+      });
+      if (state === 'prompt') updateTags();
+    }
+
+    function startTimer() {
+      timerStart = performance.now();
+      updateTimer();
+      if (timerInterval) clearInterval(timerInterval);
+      timerInterval = setInterval(updateTimer, 100);
+    }
+
+    function stopTimer() {
+      if (timerInterval) clearInterval(timerInterval);
+      timerInterval = null;
+    }
+
+    function updateTimer() {
+      const elapsed = performance.now() - timerStart;
+      const remaining = Math.max(0, TIMER_DURATION - elapsed);
+      const seconds = Math.ceil(remaining / 1000);
+      document.getElementById('timer').textContent = seconds;
+      const pct = (remaining / TIMER_DURATION) * 100;
+      document.getElementById('progress-inner').style.width = pct + '%';
+      if (remaining <= 0) {
+        stopTimer();
+        openEvaluation();
+      }
+    }
+
+    function openEvaluation() {
+      stopTimer();
+      switchState('eval');
+      updateTags();
+    }
+
+    function clearSelections() {
+      selectedPerformance = null;
+      selectedTargetCount = null;
+      document.querySelectorAll('#performance-group button').forEach(btn => btn.classList.remove('active'));
+      document.querySelectorAll('#target-group button').forEach(btn => btn.classList.remove('active'));
+      document.getElementById('score-breakdown').innerHTML = '';
+      document.getElementById('btn-confirm').disabled = true;
+    }
+
+    let selectedPerformance = null;
+    let selectedTargetCount = null;
+
+    function selectPerformance(perf) {
+      selectedPerformance = perf;
+      document.querySelectorAll('#performance-group button').forEach(btn => btn.classList.toggle('active', btn.dataset.perf === perf));
+      maybeShowBreakdown();
+    }
+
+    function selectTarget(count) {
+      selectedTargetCount = Number(count);
+      document.querySelectorAll('#target-group button').forEach(btn => btn.classList.toggle('active', Number(btn.dataset.target) === Number(count)));
+      maybeShowBreakdown();
+    }
+
+    function maybeShowBreakdown() {
+      if (selectedPerformance === null || selectedTargetCount === null) return;
+      const diff = currentRun.difficulty;
+      const correct = performanceToCorrect(selectedPerformance);
+      const basePoints = correct * difficultyMultiplier(diff);
+      const multiplier = 1 + (selectedTargetCount * 0.5);
+      const finalPoints = Math.round(basePoints * multiplier * 10) / 10;
+      document.getElementById('score-breakdown').innerHTML = `
+        <div><strong>Performance:</strong> ${selectedPerformance === 'nailed' ? 'Nailed it' : selectedPerformance === 'almost' ? 'Almost' : 'Brain freeze'}</div>
+        <div><strong>Difficulty:</strong> ${diff}</div>
+        <div><strong>Base points:</strong> ${basePoints}</div>
+        <div><strong>Target words:</strong> ${selectedTargetCount}</div>
+        <div><strong>Multiplier:</strong> ${multiplier.toFixed(1)}x</div>
+        <div><strong>Points this round:</strong> ${finalPoints}</div>
+      `;
+      document.getElementById('btn-confirm').disabled = false;
+      document.getElementById('btn-confirm').dataset.finalPoints = finalPoints;
+    }
+
+    function applyRound() {
+      if (selectedPerformance === null || selectedTargetCount === null) return;
+      const finalPoints = Number(document.getElementById('btn-confirm').dataset.finalPoints || 0);
+      currentRun.score += finalPoints;
+      currentRun.rounds += 1;
+      if (currentRun.mode === 'survival') {
+        if (selectedPerformance === 'almost') currentRun.lives -= 0.5;
+        if (selectedPerformance === 'freeze') currentRun.lives -= 1;
+        if (currentRun.lives <= 0) {
+          endRun();
+          return;
+        }
+        goToPrompt();
+      } else if (currentRun.mode === 'endless') {
+        if (selectedPerformance === 'nailed') {
+          currentRun.streak += 1;
+          goToPrompt();
+        } else {
+          endRun();
+        }
+      }
+    }
+
+    function endRun() {
+      stopTimer();
+      if (!currentRun) return;
+      const best = loadBestScores();
+      if (currentRun.mode === 'survival') {
+        if (currentRun.score > best.survival) {
+          best.survival = currentRun.score;
+        }
+        updateBestScores({ survival: best.survival });
+        document.getElementById('over-title').textContent = 'Game Over – Survival';
+        document.getElementById('over-details').innerHTML = `Score: <strong>${currentRun.score}</strong><br>Rounds played: ${currentRun.rounds}<br>Best Survival score: ${best.survival}`;
+      } else {
+        if (currentRun.score > best.endlessScore) best.endlessScore = currentRun.score;
+        if (currentRun.streak > best.endlessStreak) best.endlessStreak = currentRun.streak;
+        updateBestScores({ endlessScore: best.endlessScore, endlessStreak: best.endlessStreak });
+        document.getElementById('over-title').textContent = 'Game Over – Endless Streak';
+        document.getElementById('over-details').innerHTML = `Streak: <strong>${currentRun.streak}</strong><br>Score: ${currentRun.score}<br>Best streak: ${best.endlessStreak}<br>Best score: ${best.endlessScore}`;
+      }
+      switchState('over');
+    }
+
+    function backToMenu() {
+      stopTimer();
+      currentRun = null;
+      switchState('idle');
+    }
+
+    function updateTags() {
+      const diff = currentRun ? currentRun.difficulty : getSelectedDifficulty();
+      document.getElementById('tag-difficulty').textContent = `Difficulty: ${diff}`;
+      document.getElementById('eval-difficulty').textContent = `Difficulty: ${diff}`;
+      const modeLabel = currentMode === 'survival' ? 'Mode 1 – Survival' : currentMode === 'endless' ? 'Mode 3 – Endless Streak' : 'Mode not selected';
+      document.getElementById('tag-mode').textContent = modeLabel;
+      document.getElementById('eval-mode').textContent = modeLabel;
+      if (currentRun && currentRun.mode === 'survival') {
+        document.getElementById('lives-display').textContent = renderHearts(currentRun.lives);
+      } else {
+        document.getElementById('lives-display').textContent = '';
+      }
+    }
+
+    // ---------------------------
+    // Google Drive saving (optional)
+    // ---------------------------
+    async function saveToDrive() {
+      const clientId = document.getElementById('client-id').value.trim();
+      const msg = document.getElementById('drive-msg');
+      if (!clientId) {
+        msg.textContent = 'Please paste your Google OAuth Client ID first.';
+        return;
+      }
+      if (typeof gapi === 'undefined') {
+        msg.textContent = 'Google API client not available. Ensure you include it via <script src="https://apis.google.com/js/api.js"></script>.';
+        return;
+      }
+      msg.textContent = 'Initializing Google API...';
+      try {
+        await new Promise((resolve) => gapi.load('client:picker:drive-share', resolve));
+        await gapi.client.init({ clientId, scope: 'https://www.googleapis.com/auth/drive.file' });
+        msg.textContent = 'Signing in...';
+        await gapi.auth2.getAuthInstance().signIn();
+        const fileContent = JSON.stringify({ studySets }, null, 2);
+        const file = new Blob([fileContent], { type: 'application/json' });
+        const metadata = { name: 'five_second_study_sets.json', mimeType: 'application/json' };
+        const form = new FormData();
+        form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+        form.append('file', file);
+        msg.textContent = 'Uploading...';
+        await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+          method: 'POST',
+          headers: new Headers({ Authorization: 'Bearer ' + gapi.auth.getToken().access_token }),
+          body: form
+        });
+        msg.textContent = 'Saved to Google Drive!';
+      } catch (err) {
+        console.error(err);
+        msg.textContent = 'Drive save failed: ' + err.message;
+      }
+    }
+
+    // ---------------------------
+    // Event listeners and init
+    // ---------------------------
+    document.getElementById('tab-manage').addEventListener('click', () => switchTab('manage'));
+    document.getElementById('tab-game').addEventListener('click', () => switchTab('game'));
+    document.getElementById('btn-new-set').addEventListener('click', () => {
+      const count = studySets.length + 1;
+      studySets.push({ name: `New Set ${count}`, items: [] });
+      renderStudySets();
+      renderSetSelect();
+      // Scroll to bottom to reveal new set
+      document.getElementById('manage-page').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    document.getElementById('btn-import').addEventListener('click', openImportModal);
+    document.getElementById('btn-import-cancel').addEventListener('click', closeImportModal);
+    document.getElementById('btn-import-confirm').addEventListener('click', handleImport);
+    document.getElementById('btn-save-local').addEventListener('click', () => { saveStudySets(); alert('Saved locally.'); });
+    document.getElementById('btn-download').addEventListener('click', downloadSets);
+    document.getElementById('btn-download-dup').addEventListener('click', downloadSets);
+    document.getElementById('btn-drive-save').addEventListener('click', saveToDrive);
+
+    document.getElementById('set-select').addEventListener('change', (e) => setLastStudySetName(e.target.value));
+
+    document.getElementById('difficulty-group').addEventListener('change', () => setLastDifficulty(getSelectedDifficulty()));
+
+    document.getElementById('mode-survival').addEventListener('click', () => setMode('survival'));
+    document.getElementById('mode-endless').addEventListener('click', () => setMode('endless'));
+    document.getElementById('btn-start').addEventListener('click', startGame);
+    document.getElementById('btn-done').addEventListener('click', openEvaluation);
+    document.getElementById('btn-end').addEventListener('click', () => { currentRun = null; backToMenu(); });
+    document.getElementById('btn-confirm').addEventListener('click', applyRound);
+    document.getElementById('btn-back').addEventListener('click', backToMenu);
+    document.getElementById('btn-play-again').addEventListener('click', () => {
+      const lastMode = currentRun ? currentRun.mode : currentMode;
+      currentRun = null;
+      setMode(lastMode);
+      startGame();
+    });
+
+    document.getElementById('performance-group').addEventListener('click', (e) => {
+      if (e.target.dataset.perf) selectPerformance(e.target.dataset.perf);
+    });
+    document.getElementById('target-group').addEventListener('click', (e) => {
+      if (e.target.dataset.target !== undefined) selectTarget(e.target.dataset.target);
+    });
+
+    // Initialize app
+    loadStudySets();
+    renderStudySets();
+    renderSetSelect();
+    renderBestStats();
+    const lastDiff = getLastDifficulty();
+    if (lastDiff) {
+      const radio = document.querySelector(`input[name="difficulty"][value="${lastDiff}"]`);
+      if (radio) radio.checked = true;
+    }
+    updateTags();
+  </script>
+</body>
+</html>
