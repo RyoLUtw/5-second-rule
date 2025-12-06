@@ -136,6 +136,7 @@
       justify-content: center;
       z-index: 10;
     }
+    .modal-backdrop.hidden { display: none !important; pointer-events: none; }
     .modal { background: #fff; border-radius: 12px; padding: 16px; width: min(640px, 94vw); box-shadow: 0 8px 24px rgba(0,0,0,0.2); }
     @media (max-width: 720px) {
       header { position: sticky; top: 0; }
@@ -161,22 +162,20 @@
           <h2>Study Set Management</h2>
           <p>Build vocabulary practice sets, import from JSON, or back them up.</p>
         </div>
-        <div class="flex flex-wrap">
-          <button class="btn-primary" id="btn-new-set">New Set</button>
-          <button class="btn-ghost" id="btn-import">Import JSON</button>
-          <button class="btn-ghost" id="btn-save-local">Save sets locally</button>
-          <button class="btn-ghost" id="btn-download">Download sets as JSON</button>
-        </div>
+      </div>
+
+      <div class="flex flex-wrap" style="gap:8px; margin-bottom:12px;">
+        <button class="btn-primary" id="btn-new-set">New Set</button>
+        <button class="btn-ghost" id="btn-import">Import JSON</button>
       </div>
 
       <div class="card" id="drive-card">
-        <h3>Cloud Backup</h3>
-        <p class="small">Save a copy to your Google Drive using your own OAuth Client ID.</p>
-        <label for="client-id">Google OAuth Client ID</label>
-        <input type="text" id="client-id" placeholder="Paste your OAuth Client ID here">
+        <h3>Back Up</h3>
+        <p class="small">Save a copy to Google Drive or keep it in this browser.</p>
         <div class="flex flex-wrap">
+          <button class="btn-ghost" id="btn-drive-connect">Connect to Google Drive</button>
           <button class="btn-primary" id="btn-drive-save">Save sets to Google Drive</button>
-          <button class="btn-ghost" id="btn-download-dup">Download sets as JSON</button>
+          <button class="btn-ghost" id="btn-save-local">Save sets in browser</button>
         </div>
         <div class="small" id="drive-msg"></div>
       </div>
@@ -221,7 +220,11 @@
       <div class="card" id="game-area">
         <div id="state-idle" class="state-block">
           <p>Select mode, difficulty, and study set to begin.</p>
-          <button class="btn-primary" id="btn-start">Start Game</button>
+          <div class="selection-group" style="margin-top:12px;">
+            <button class="btn-primary" id="btn-start">Start Game</button>
+            <button class="btn-ghost" id="btn-demo-test">Play Demo Test</button>
+          </div>
+          <div class="small">Demo Test uses the built-in sample set for a quick trial run.</div>
         </div>
 
         <div id="state-prompt" class="hidden">
@@ -277,8 +280,8 @@
     <div class="modal">
       <h3>Import Study Sets from JSON</h3>
       <p class="small">Paste an array of study sets with <code>name</code> and <code>items</code> (each item has <code>prompt</code> and <code>targetWords</code> array).</p>
-      <textarea id="import-text"></textarea>
-      <div class="small" id="import-error" style="color:var(--danger);"></div>
+      <textarea id="import-text" placeholder='[{"name":"My Set","items":[{"prompt":"Name 3...","targetWords":["a","b","c"]}]}]'></textarea>
+      <div class="small" id="import-error" style="color:var(--danger); min-height: 18px;"></div>
       <div class="flex between">
         <button class="btn-primary" id="btn-import-confirm">Import</button>
         <button class="btn-ghost" id="btn-import-cancel">Cancel</button>
@@ -298,8 +301,21 @@
       lastSet: 'fiveSecondLastStudySetName',
       lastDifficulty: 'fiveSecondLastDifficulty'
     };
+    const DEFAULT_CLIENT_ID = '332987792434-u7r3hdl46asbqo0si3ngqu46kdbgf2at.apps.googleusercontent.com';
+
+    const DEMO_SET_NAME = 'Demo: Quick Start';
+    const demoSet = {
+      name: DEMO_SET_NAME,
+      isDemo: true,
+      items: [
+        { prompt: 'Name 3 animals', targetWords: ['furry', 'wild', 'pet'] },
+        { prompt: 'Name 3 household items', targetWords: ['kitchen', 'appliance', 'furniture'] },
+        { prompt: 'Name 3 sports', targetWords: ['team', 'ball', 'outdoor'] }
+      ]
+    };
 
     const defaultSets = [
+      demoSet,
       {
         name: 'Fruits & Food',
         items: [
@@ -324,6 +340,29 @@
     let timerStart = null;
     const TIMER_DURATION = 5000; // 5 seconds in ms
 
+    const cloneSet = (set) => ({
+      ...set,
+      items: set.items.map(item => ({ prompt: item.prompt, targetWords: [...item.targetWords] }))
+    });
+
+    function normalizeSetMeta() {
+      studySets.forEach((set, idx) => {
+        if (set._open === undefined) set._open = false;
+        if (set._editing === undefined) set._editing = false;
+        if (!Array.isArray(set.items)) set.items = [];
+      });
+    }
+
+    function ensureDemoSetInSets() {
+      const index = studySets.findIndex(s => s.isDemo || s.name === DEMO_SET_NAME);
+      const demoCopy = cloneSet(demoSet);
+      if (index === -1) {
+        studySets.unshift(demoCopy);
+      } else {
+        studySets[index] = demoCopy;
+      }
+    }
+
     // Load study sets or use defaults
     function loadStudySets() {
       const saved = localStorage.getItem(STORAGE_KEYS.sets);
@@ -332,17 +371,22 @@
           const parsed = JSON.parse(saved);
           if (Array.isArray(parsed)) {
             studySets = parsed;
+            ensureDemoSetInSets();
+            normalizeSetMeta();
             return;
           }
         } catch (e) {
           console.warn('Failed to parse saved sets, using defaults', e);
         }
       }
-      studySets = defaultSets;
+      studySets = defaultSets.map(cloneSet);
+      ensureDemoSetInSets();
+      normalizeSetMeta();
     }
 
     function saveStudySets() {
       localStorage.setItem(STORAGE_KEYS.sets, JSON.stringify(studySets));
+      unsavedChanges = false;
     }
 
     function loadBestScores() {
@@ -377,70 +421,124 @@
         return;
       }
       studySets.forEach((set, setIndex) => {
+        if (set._open === undefined) set._open = false;
+        if (set._editing === undefined) set._editing = false;
         const card = document.createElement('div');
         card.className = 'set-card';
         card.innerHTML = `
           <div class="set-header">
-            <input type="text" value="${set.name}" aria-label="Set name" />
+            <div class="flex" style="flex:1 1 auto; align-items:center; gap:8px;">
+              <button class="btn-ghost toggle-open">${set._open ? 'Collapse' : 'Expand'}</button>
+              <input type="text" value="${set.name}" aria-label="Set name" data-field="name" ${set.isDemo || !set._editing ? 'disabled' : ''} />
+              ${set.isDemo ? '<span class="pill">Demo set</span>' : ''}
+            </div>
             <span class="small">${set.items.length} items</span>
-            <button class="btn-danger">Delete set</button>
+            <div class="flex" style="gap:8px;">
+              <button class="btn-ghost edit-btn" ${set.isDemo ? 'disabled' : ''}>${set._editing ? 'Done' : 'Edit'}</button>
+              <button class="btn-danger" ${set.isDemo ? 'disabled' : ''}>${set.isDemo ? 'Locked' : 'Delete set'}</button>
+            </div>
           </div>
-          <div class="set-body"></div>
-          <button class="btn-ghost">Add item</button>
+          <div class="set-body" style="display:${set._open ? 'block' : 'none'};"></div>
+          <button class="btn-ghost add-item-btn" ${set.isDemo || !set._editing ? 'disabled' : ''}>Add item</button>
         `;
 
-        const nameInput = card.querySelector('input');
-        nameInput.addEventListener('input', (e) => {
-          set.name = e.target.value || 'Untitled set';
-          renderSetSelect();
+        const nameInput = card.querySelector('input[data-field="name"]');
+        if (!set.isDemo) {
+          nameInput.addEventListener('input', (e) => {
+            set.name = e.target.value || 'Untitled set';
+            renderSetSelect();
+            unsavedChanges = true;
+          });
+        }
+
+        const toggleBtn = card.querySelector('.toggle-open');
+        toggleBtn.addEventListener('click', () => {
+          const newState = !set._open;
+          studySets.forEach((s, i) => {
+            if (i !== setIndex) {
+              s._open = false;
+              s._editing = false;
+            }
+          });
+          set._open = newState;
+          if (!set._open) set._editing = false;
+          renderStudySets();
         });
 
-        const deleteBtn = card.querySelector('.btn-danger');
-        deleteBtn.addEventListener('click', () => {
-          if (confirm('Delete this set?')) {
-            studySets.splice(setIndex, 1);
+        const editBtn = card.querySelector('.edit-btn');
+        if (!set.isDemo) {
+          editBtn.addEventListener('click', () => {
+            studySets.forEach((s, i) => {
+              if (i !== setIndex) {
+                s._open = false;
+                s._editing = false;
+              }
+            });
+            set._open = true;
+            set._editing = !set._editing;
             renderStudySets();
             renderSetSelect();
-          }
-        });
+          });
+        }
+
+        const deleteBtn = card.querySelector('.btn-danger');
+        if (!set.isDemo) {
+          deleteBtn.addEventListener('click', () => {
+            if (confirm('Delete this set?')) {
+              studySets.splice(setIndex, 1);
+              renderStudySets();
+              renderSetSelect();
+            }
+          });
+        }
 
         const body = card.querySelector('.set-body');
         set.items.forEach((item, itemIndex) => {
-          body.appendChild(renderItemRow(set, item, itemIndex));
+          body.appendChild(renderItemRow(set, item, itemIndex, set.isDemo || !set._editing));
         });
 
-        const addBtn = card.querySelector('.btn-ghost');
-        addBtn.addEventListener('click', () => {
-          const newItem = { prompt: '', targetWords: [] };
-          set.items.push(newItem);
-          body.appendChild(renderItemRow(set, newItem, set.items.length - 1));
-        });
+        const addBtn = card.querySelector('.add-item-btn');
+        if (!set.isDemo) {
+          addBtn.addEventListener('click', () => {
+            const newItem = { prompt: '', targetWords: [] };
+            set.items.push(newItem);
+            set._open = true;
+            set._editing = true;
+            body.appendChild(renderItemRow(set, newItem, set.items.length - 1));
+            renderSetSelect();
+            unsavedChanges = true;
+          });
+        }
 
         list.appendChild(card);
       });
     }
 
-    function renderItemRow(set, item, itemIndex) {
+    function renderItemRow(set, item, itemIndex, readOnly = false) {
       const row = document.createElement('div');
       row.className = 'item-row';
       row.innerHTML = `
         <label>Prompt</label>
-        <input type="text" value="${item.prompt}" placeholder="Name 3..." />
+        <input type="text" value="${item.prompt}" placeholder="Name 3..." ${readOnly ? 'disabled' : ''} />
         <label>Target words (comma separated)</label>
-        <input type="text" value="${item.targetWords.join(', ')}" placeholder="tropical, juicy, citrus" />
-        <button class="btn-danger">Delete item</button>
+        <input type="text" value="${item.targetWords.join(', ')}" placeholder="tropical, juicy, citrus" ${readOnly ? 'disabled' : ''} />
+        <button class="btn-danger" ${readOnly ? 'disabled' : ''}>${readOnly ? 'Locked for demo' : 'Delete item'}</button>
       `;
       const [promptInput, targetInput] = row.querySelectorAll('input');
-      promptInput.addEventListener('input', (e) => { item.prompt = e.target.value; });
-      targetInput.addEventListener('input', (e) => {
-        item.targetWords = e.target.value.split(',').map(w => w.trim()).filter(Boolean);
-      });
-      const del = row.querySelector('button');
-      del.addEventListener('click', () => {
-        set.items.splice(itemIndex, 1);
-        renderStudySets();
-        renderSetSelect();
-      });
+      if (!readOnly) {
+        promptInput.addEventListener('input', (e) => { item.prompt = e.target.value; unsavedChanges = true; });
+        targetInput.addEventListener('input', (e) => {
+          item.targetWords = e.target.value.split(',').map(w => w.trim()).filter(Boolean);
+          unsavedChanges = true;
+        });
+        const del = row.querySelector('button');
+        del.addEventListener('click', () => {
+          set.items.splice(itemIndex, 1);
+          renderStudySets();
+          renderSetSelect();
+          unsavedChanges = true;
+        });
+      }
       return row;
     }
 
@@ -465,6 +563,20 @@
         select.value = last;
       }
       hint.textContent = 'Selected set will be used for prompts.';
+    }
+
+    function ensureGameSelection() {
+      const select = document.getElementById('set-select');
+      if (!select.options.length) return;
+      const hasUserSets = studySets.some(s => !s.isDemo);
+      const demoOption = Array.from(select.options).find(opt => opt.value === DEMO_SET_NAME);
+      if (!hasUserSets && demoOption) {
+        select.value = DEMO_SET_NAME;
+        setLastStudySetName(DEMO_SET_NAME);
+      } else if (!Array.from(select.options).some(opt => opt.value === select.value)) {
+        select.selectedIndex = 0;
+        setLastStudySetName(select.value);
+      }
     }
 
     function renderBestStats() {
@@ -511,10 +623,13 @@
           return;
         }
         studySets = parsed;
+        ensureDemoSetInSets();
+        normalizeSetMeta();
         renderStudySets();
         renderSetSelect();
         saveStudySets();
         closeImportModal();
+        unsavedChanges = false;
       } catch (e) {
         error.textContent = 'JSON parse error: ' + e.message;
       }
@@ -528,6 +643,11 @@
       document.getElementById('game-page').classList.toggle('hidden', target !== 'game');
       document.getElementById('tab-manage').classList.toggle('active', target === 'manage');
       document.getElementById('tab-game').classList.toggle('active', target === 'game');
+      if (target === 'game') {
+        ensureDemoSetInSets();
+        renderSetSelect();
+        ensureGameSelection();
+      }
     }
 
     function setMode(mode) {
@@ -536,6 +656,9 @@
       document.getElementById('mode-endless').classList.toggle('active', mode === 'endless');
       updateTags();
     }
+
+    // Track unsaved changes
+    let unsavedChanges = false;
 
     // ---------------------------
     // Game flow helpers
@@ -593,6 +716,15 @@
         lastIndex: -1
       };
       goToPrompt();
+    }
+
+    function startDemoTest() {
+      ensureDemoSetInSets();
+      renderSetSelect();
+      if (!currentMode) setMode('survival');
+      const select = document.getElementById('set-select');
+      select.value = DEMO_SET_NAME;
+      startGame();
     }
 
     function goToPrompt() {
@@ -770,7 +902,7 @@
         return;
       }
       if (typeof gapi === 'undefined') {
-        msg.textContent = 'Google API client not available. Ensure you include it via <script src="https://apis.google.com/js/api.js"></script>.';
+        msg.textContent = 'Google API client not available. Ensure you include it via <script src="https://apis.google.com/js/api.js"><\\/script>.';
         return;
       }
       msg.textContent = 'Initializing Google API...';
@@ -798,6 +930,24 @@
       }
     }
 
+    async function connectDrive() {
+      const msg = document.getElementById('drive-msg');
+      if (typeof gapi === 'undefined') {
+        msg.textContent = 'Google API client not available. Include https://apis.google.com/js/api.js';
+        return;
+      }
+      msg.textContent = 'Connecting to Google Drive...';
+      try {
+        await new Promise((resolve) => gapi.load('client:picker:drive-share', resolve));
+        await gapi.client.init({ clientId: DEFAULT_CLIENT_ID, scope: 'https://www.googleapis.com/auth/drive.file' });
+        await gapi.auth2.getAuthInstance().signIn();
+        msg.textContent = 'Connected to Google Drive.';
+      } catch (err) {
+        console.error(err);
+        msg.textContent = 'Drive connect failed: ' + err.message;
+      }
+    }
+
     // ---------------------------
     // Event listeners and init
     // ---------------------------
@@ -805,18 +955,22 @@
     document.getElementById('tab-game').addEventListener('click', () => switchTab('game'));
     document.getElementById('btn-new-set').addEventListener('click', () => {
       const count = studySets.length + 1;
-      studySets.push({ name: `New Set ${count}`, items: [] });
+      studySets.push({ name: `New Set ${count}`, items: [], _open: true, _editing: true });
+      studySets.forEach((s, i, arr) => {
+        if (i !== arr.length - 1) { s._open = false; s._editing = false; }
+      });
+      studySets = [studySets.pop(), ...studySets]; // move new set to top
       renderStudySets();
       renderSetSelect();
+      unsavedChanges = true;
       // Scroll to bottom to reveal new set
       document.getElementById('manage-page').scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
     document.getElementById('btn-import').addEventListener('click', openImportModal);
     document.getElementById('btn-import-cancel').addEventListener('click', closeImportModal);
     document.getElementById('btn-import-confirm').addEventListener('click', handleImport);
-    document.getElementById('btn-save-local').addEventListener('click', () => { saveStudySets(); alert('Saved locally.'); });
-    document.getElementById('btn-download').addEventListener('click', downloadSets);
-    document.getElementById('btn-download-dup').addEventListener('click', downloadSets);
+    document.getElementById('btn-save-local').addEventListener('click', () => { saveStudySets(); alert('Saved locally.'); unsavedChanges = false; });
+    document.getElementById('btn-drive-connect').addEventListener('click', connectDrive);
     document.getElementById('btn-drive-save').addEventListener('click', saveToDrive);
 
     document.getElementById('set-select').addEventListener('change', (e) => setLastStudySetName(e.target.value));
@@ -826,6 +980,7 @@
     document.getElementById('mode-survival').addEventListener('click', () => setMode('survival'));
     document.getElementById('mode-endless').addEventListener('click', () => setMode('endless'));
     document.getElementById('btn-start').addEventListener('click', startGame);
+    document.getElementById('btn-demo-test').addEventListener('click', startDemoTest);
     document.getElementById('btn-done').addEventListener('click', openEvaluation);
     document.getElementById('btn-end').addEventListener('click', () => { currentRun = null; backToMenu(); });
     document.getElementById('btn-confirm').addEventListener('click', applyRound);
@@ -848,12 +1003,19 @@
     loadStudySets();
     renderStudySets();
     renderSetSelect();
+    ensureGameSelection();
     renderBestStats();
     const lastDiff = getLastDifficulty();
     if (lastDiff) {
       const radio = document.querySelector(`input[name="difficulty"][value="${lastDiff}"]`);
       if (radio) radio.checked = true;
     }
+    window.addEventListener('beforeunload', (e) => {
+      if (unsavedChanges) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    });
     updateTags();
   </script>
 </body>
