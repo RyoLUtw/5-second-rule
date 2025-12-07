@@ -187,6 +187,9 @@
       <div class="card" id="drive-card">
         <h3>Back Up</h3>
         <p class="small">Save a copy to Google Drive or keep it in this browser.</p>
+        <label for="client-id" class="small">Google OAuth Client ID</label>
+        <input type="text" id="client-id" aria-label="Google OAuth Client ID" readonly>
+        <div class="small">The provided client ID is preconfigured and cannot be changed.</div>
         <div class="flex flex-wrap">
           <button class="btn-ghost" id="btn-drive-connect">Connect to Google Drive</button>
           <button class="btn-primary" id="btn-drive-save">Save sets to Google Drive</button>
@@ -391,6 +394,8 @@
       lastDifficulty: 'fiveSecondLastDifficulty'
     };
     const DEFAULT_CLIENT_ID = '332987792434-u7r3hdl46asbqo0si3ngqu46kdbgf2at.apps.googleusercontent.com';
+    const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+    let gapiLoaderPromise = null;
 
     const DEMO_SET_NAME = 'Demo: Quick Start';
     const demoSet = {
@@ -1219,33 +1224,72 @@
     // ---------------------------
     // Google Drive saving (optional)
     // ---------------------------
-    async function saveToDrive() {
-      const clientId = document.getElementById('client-id').value.trim();
+    function loadGapiScript() {
+      if (window.gapi) return Promise.resolve();
+      if (!gapiLoaderPromise) {
+        gapiLoaderPromise = new Promise((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = 'https://apis.google.com/js/api.js';
+          script.async = true;
+          script.defer = true;
+          script.onload = () => resolve();
+          script.onerror = () => reject(new Error('Failed to load Google API client.'));
+          document.head.appendChild(script);
+        });
+      }
+      return gapiLoaderPromise;
+    }
+
+    async function initDriveClient() {
+      await loadGapiScript();
+      return new Promise((resolve, reject) => {
+        gapi.load('client:auth2', async () => {
+          try {
+            await gapi.client.init({ clientId: DEFAULT_CLIENT_ID, scope: DRIVE_SCOPE });
+            resolve(gapi.auth2.getAuthInstance());
+          } catch (err) {
+            reject(err);
+          }
+        });
+      });
+    }
+
+    async function ensureDriveAuth() {
       const msg = document.getElementById('drive-msg');
-      if (!clientId) {
-        msg.textContent = 'Please paste your Google OAuth Client ID first.';
-        return;
+      msg.textContent = 'Connecting to Google Drive...';
+      const auth = await initDriveClient();
+      const user = auth.currentUser.get();
+      if (!user.isSignedIn()) {
+        await auth.signIn();
+      } else {
+        const token = user.getAuthResponse(true);
+        if (!token || token.expires_at <= Date.now()) {
+          await auth.signIn();
+        }
       }
-      if (typeof gapi === 'undefined') {
-        msg.textContent = 'Google API client not available. Ensure you include it via <script src="https://apis.google.com/js/api.js"><\\/script>.';
-        return;
-      }
-      msg.textContent = 'Initializing Google API...';
+      msg.textContent = 'Connected to Google Drive.';
+      return auth;
+    }
+
+    async function saveToDrive() {
+      const msg = document.getElementById('drive-msg');
       try {
-        await new Promise((resolve) => gapi.load('client:picker:drive-share', resolve));
-        await gapi.client.init({ clientId, scope: 'https://www.googleapis.com/auth/drive.file' });
-        msg.textContent = 'Signing in...';
-        await gapi.auth2.getAuthInstance().signIn();
+        const auth = await ensureDriveAuth();
+        const token = auth.currentUser.get().getAuthResponse(true)?.access_token;
+        if (!token) {
+          msg.textContent = 'Unable to obtain access token for Google Drive.';
+          return;
+        }
+        msg.textContent = 'Uploading study sets to Google Drive...';
         const fileContent = JSON.stringify({ studySets }, null, 2);
         const file = new Blob([fileContent], { type: 'application/json' });
         const metadata = { name: 'five_second_study_sets.json', mimeType: 'application/json' };
         const form = new FormData();
         form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
         form.append('file', file);
-        msg.textContent = 'Uploading...';
         await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
           method: 'POST',
-          headers: new Headers({ Authorization: 'Bearer ' + gapi.auth.getToken().access_token }),
+          headers: new Headers({ Authorization: 'Bearer ' + token }),
           body: form
         });
         msg.textContent = 'Saved to Google Drive!';
@@ -1257,16 +1301,8 @@
 
     async function connectDrive() {
       const msg = document.getElementById('drive-msg');
-      if (typeof gapi === 'undefined') {
-        msg.textContent = 'Google API client not available. Include https://apis.google.com/js/api.js';
-        return;
-      }
-      msg.textContent = 'Connecting to Google Drive...';
       try {
-        await new Promise((resolve) => gapi.load('client:picker:drive-share', resolve));
-        await gapi.client.init({ clientId: DEFAULT_CLIENT_ID, scope: 'https://www.googleapis.com/auth/drive.file' });
-        await gapi.auth2.getAuthInstance().signIn();
-        msg.textContent = 'Connected to Google Drive.';
+        await ensureDriveAuth();
       } catch (err) {
         console.error(err);
         msg.textContent = 'Drive connect failed: ' + err.message;
@@ -1337,6 +1373,7 @@
 
     // Initialize app
     loadStudySets();
+    document.getElementById('client-id').value = DEFAULT_CLIENT_ID;
     renderStudySets();
     renderSetSelect();
     ensureGameSelection();
