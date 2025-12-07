@@ -98,7 +98,7 @@
     .set-header { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
     .item-row { border: 1px dashed var(--border); padding: 10px; border-radius: 10px; margin: 8px 0; background: #fdfdfd; }
     .small { color: var(--muted); font-size: 13px; }
-    .hidden { display: none; }
+    .hidden { display: none !important; }
     .pill { padding: 4px 8px; border-radius: 999px; background: #edf2f7; color: var(--muted); font-size: 12px; }
     .mode-toggle button { border: 1px solid var(--border); background: #f8fafc; }
     .mode-toggle button.active { background: var(--primary); color: #fff; border-color: var(--primary); }
@@ -305,17 +305,15 @@
         <div id="state-preview" class="hidden">
           <h4 class="small">Upcoming prompt</h4>
           <h3 id="preview-text">Prompt preview</h3>
-          <div class="small" id="preview-targets"></div>
           <div class="selection-group" style="margin-top:12px;">
             <button class="btn-primary" id="btn-start-timer">Start Timer</button>
           </div>
         </div>
 
         <div id="state-prompt" class="hidden">
+          <h3 id="prompt-text">Prompt goes here</h3>
           <div class="timer" id="timer">5</div>
           <div class="progress"><div class="progress-inner" id="progress-inner"></div></div>
-          <h3 id="prompt-text">Prompt goes here</h3>
-          <div class="small" id="target-hint"></div>
           <div class="selection-group" style="margin-top:12px;">
             <button class="btn-primary" id="btn-pause">Pause</button>
           </div>
@@ -988,9 +986,8 @@
       currentRun.lastIndex = idx;
       const item = setItems[idx];
       document.getElementById('prompt-text').textContent = item.prompt || 'Unnamed prompt';
-      document.getElementById('target-hint').textContent = item.targetWords.length ? `Target words: ${item.targetWords.join(', ')}` : 'Target words: none provided';
       document.getElementById('eval-prompt').textContent = item.prompt || 'Unnamed prompt';
-      document.getElementById('eval-targets').textContent = document.getElementById('target-hint').textContent;
+      document.getElementById('eval-targets').textContent = item.targetWords.length ? `Target words: ${item.targetWords.join(', ')}` : 'Target words: none provided';
       clearSelections();
       currentRun.currentItem = item;
       const duration = currentRun.timerDuration || (timerLengthSeconds * 1000);
@@ -1002,7 +999,6 @@
       document.getElementById('timer').textContent = Math.ceil(timerRemaining / 1000);
       document.getElementById('progress-inner').style.width = '100%';
       document.getElementById('preview-text').textContent = item.prompt || 'Unnamed prompt';
-      document.getElementById('preview-targets').textContent = item.targetWords.length ? `Target words: ${item.targetWords.join(', ')}` : 'Target words: none provided';
       switchState('preview');
     }
 
@@ -1016,6 +1012,7 @@
       ['state-idle','state-preview','state-prompt','state-eval','state-over'].forEach(id => {
         document.getElementById(id).classList.toggle('hidden', id !== `state-${state}`);
       });
+      if (!awaitingNext) showNextButton(false);
       if (state === 'prompt') updateStatus();
     }
 
@@ -1359,6 +1356,7 @@
     setTargetCount(0);
     updateTimerDisplay();
     updateLivesVisibility();
+    showNextButton(false);
     toggleSetupContainer(false);
     updateStatus();
   </script>
