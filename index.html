@@ -127,10 +127,15 @@
     .selection-group button { min-width: 80px; }
     .selection-group button.active { box-shadow: 0 0 0 2px rgba(74, 85, 104, 0.2); transform: translateY(-1px); }
     .disabled { opacity: 0.6; pointer-events: none; }
-    .hearts { font-size: 22px; }
+    .hearts { font-size: 26px; }
     .tag { background: #f1f5f9; padding: 4px 8px; border-radius: 8px; margin: 0 4px; font-size: 12px; display: inline-block; }
     .panel { background: #f8fafc; border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
-    .point-change { min-height: 18px; font-size: 13px; color: var(--accent); }
+    .status-tags { display: flex; gap: 8px; flex-wrap: wrap; }
+    .status-tags .tag { min-width: 140px; text-align: center; }
+    .status-metrics { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px; }
+    .status-metric { background: #f8fafc; border: 1px solid var(--border); border-radius: 10px; padding: 12px; flex: 1 1 50vw; max-width: min(50vw, 440px); max-height: 140px; }
+    .status-value { font-size: 26px; font-weight: 700; }
+    .point-change { min-height: 18px; font-size: 18px; color: var(--accent); }
     .point-change.negative { color: var(--danger); }
     .target-control { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center; }
     .target-control input[type="range"] { flex: 1 1 200px; min-width: 160px; }
@@ -232,31 +237,29 @@
         </div>
       </div>
 
-      <div class="card hidden" id="status-card">
-        <div class="flex between flex-wrap">
-          <div class="flex flex-wrap" style="gap:8px;">
-            <div class="tag" id="status-mode"></div>
-            <div class="tag" id="status-difficulty"></div>
-          </div>
-          <div class="flex flex-wrap" style="gap:16px;">
-            <div>
-              <div class="small">Lives</div>
-              <div class="hearts" id="lives-display"></div>
-              <div class="point-change" id="life-change"></div>
-            </div>
-            <div>
-              <div class="small">Total Points</div>
-              <div class="score" id="status-score">0</div>
-              <div class="point-change" id="score-change"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-
       <div class="card">
         <h4>Best Records</h4>
         <div id="best-survival" class="small">Survival best score: 0</div>
         <div id="best-endless" class="small">Endless best streak: 0 · Best score: 0</div>
+      </div>
+
+      <div class="card hidden" id="status-card">
+        <div class="status-tags">
+          <div class="tag" id="status-mode"></div>
+          <div class="tag" id="status-difficulty"></div>
+        </div>
+        <div class="status-metrics">
+          <div class="status-metric">
+            <div class="small">Lives</div>
+            <div class="status-value hearts" id="lives-display"></div>
+            <div class="point-change" id="life-change"></div>
+          </div>
+          <div class="status-metric">
+            <div class="small">Total Points</div>
+            <div class="status-value score" id="status-score">0</div>
+            <div class="point-change" id="score-change"></div>
+          </div>
+        </div>
       </div>
 
       <div class="card" id="game-area">
@@ -377,6 +380,7 @@
     let currentRun = null;   // Tracks the current session data
     let timerInterval = null;
     let timerStart = null;
+    let timerEnd = null;
     let timerRemaining = 5000;
     let timerPaused = false;
     const TIMER_DURATION = 5000; // 5 seconds in ms
@@ -793,11 +797,13 @@
     }
 
     function renderHearts(lives) {
-      let display = '';
-      for (let i = 0; i < 3; i += 0.5) {
-        if (lives - i >= 0.5) display += '❤'; else display += '♡';
-      }
-      return display;
+      const hearts = [];
+      const full = Math.floor(lives);
+      const hasHalf = lives % 1 >= 0.5;
+      for (let i = 0; i < full; i++) hearts.push('❤️');
+      if (hasHalf && hearts.length < 3) hearts.push('💔');
+      while (hearts.length < 3) hearts.push('🤍');
+      return hearts.join('');
     }
 
     function startGame() {
@@ -879,6 +885,7 @@
     function startTimer() {
       if (timerInterval) clearInterval(timerInterval);
       timerStart = performance.now();
+      timerEnd = timerStart + timerRemaining;
       timerPaused = false;
       timerInterval = setInterval(updateTimer, 100);
       updateTimer();
@@ -890,8 +897,8 @@
     }
 
     function updateTimer() {
-      const elapsed = performance.now() - timerStart;
-      const remaining = Math.max(0, timerRemaining - elapsed);
+      const now = performance.now();
+      const remaining = Math.max(0, (timerEnd || now) - now);
       timerRemaining = remaining;
       const seconds = Math.ceil(remaining / 1000);
       document.getElementById('timer').textContent = seconds;
@@ -911,7 +918,7 @@
         document.getElementById('btn-pause').textContent = 'Pause';
       } else {
         timerPaused = true;
-        timerRemaining = Math.max(0, timerRemaining - (performance.now() - timerStart));
+        timerRemaining = Math.max(0, (timerEnd || performance.now()) - performance.now());
         stopTimer();
         document.getElementById('btn-pause').textContent = 'Resume';
         document.getElementById('timer').textContent = Math.ceil(timerRemaining / 1000);
