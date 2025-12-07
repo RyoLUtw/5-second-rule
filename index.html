@@ -1,1 +1,1364 @@
-﻿
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>5 Second Rule Trainer</title>
+  <style>
+    :root {
+      --bg: #f7f7fb;
+      --card: #ffffff;
+      --primary: #5a67d8;
+      --primary-dark: #434190;
+      --accent: #48bb78;
+      --danger: #e53e3e;
+      --text: #2d3748;
+      --muted: #718096;
+      --border: #e2e8f0;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    header {
+      background: #fff;
+      border-bottom: 1px solid var(--border);
+      padding: 12px 16px;
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+    .tab-btn {
+      padding: 10px 14px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: #f8fafc;
+      cursor: pointer;
+      transition: background 0.2s, color 0.2s, border 0.2s;
+    }
+    .tab-btn.active {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary);
+    }
+    .container {
+      max-width: 1100px;
+      margin: 16px auto 32px;
+      padding: 0 12px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+      margin-bottom: 16px;
+    }
+    h1, h2, h3, h4 {
+      margin: 0 0 8px;
+      color: var(--text);
+    }
+    p { margin: 4px 0 8px; color: var(--muted); }
+    label { font-weight: 600; }
+    input[type="text"], select, textarea {
+      width: 100%;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      margin: 4px 0 8px;
+      font-size: 14px;
+    }
+    textarea { min-height: 160px; }
+    button {
+      padding: 10px 14px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: transform 0.1s, box-shadow 0.1s, background 0.2s;
+    }
+    button:active { transform: translateY(1px); }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-primary:hover { background: var(--primary-dark); }
+    .btn-ghost { background: #f8fafc; color: var(--text); border: 1px solid var(--border); }
+    .btn-danger { background: #fff5f5; color: var(--danger); border: 1px solid #fed7d7; }
+    .btn-accent { background: var(--accent); color: #fff; }
+    .flex { display: flex; align-items: center; gap: 8px; }
+    .flex-wrap { flex-wrap: wrap; }
+    .between { justify-content: space-between; }
+    .grid { display: grid; gap: 12px; }
+    .set-card { border: 1px solid var(--border); border-radius: 12px; padding: 12px; background: #fff; }
+    .set-header { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+    .item-row { border: 1px dashed var(--border); padding: 10px; border-radius: 10px; margin: 8px 0; background: #fdfdfd; }
+    .small { color: var(--muted); font-size: 13px; }
+    .hidden { display: none !important; }
+    .pill { padding: 4px 8px; border-radius: 999px; background: #edf2f7; color: var(--muted); font-size: 12px; }
+    .mode-toggle button { border: 1px solid var(--border); background: #f8fafc; }
+    .mode-toggle button.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .timer {
+      font-size: 48px;
+      text-align: center;
+      margin: 12px 0;
+      color: var(--primary-dark);
+      font-weight: 700;
+    }
+    .score { font-size: 24px; font-weight: 700; }
+    .progress {
+      background: #e2e8f0;
+      border-radius: 10px;
+      height: 12px;
+      overflow: hidden;
+    }
+    .progress-inner {
+      background: var(--primary);
+      width: 100%;
+      height: 100%;
+      transition: width 0.1s linear;
+    }
+    .state-block { text-align: center; }
+    .selection-group { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+    .selection-group button { min-width: 80px; }
+    .selection-group button.active { box-shadow: 0 0 0 2px rgba(74, 85, 104, 0.2); transform: translateY(-1px); }
+    .disabled { opacity: 0.6; pointer-events: none; }
+    .hearts { font-size: 26px; }
+    .tag { background: #f1f5f9; padding: 4px 8px; border-radius: 8px; margin: 0 4px; font-size: 12px; display: inline-block; }
+    .panel { background: #f8fafc; border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
+    .status-tags { display: flex; gap: 8px; flex-wrap: wrap; }
+    .status-tags .tag { min-width: 140px; text-align: center; }
+    .status-metrics { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px; }
+    .status-metric { background: #f8fafc; border: 1px solid var(--border); border-radius: 10px; padding: 12px; flex: 1 1 50vw; max-width: min(50vw, 440px); max-height: 140px; }
+    .status-value { font-size: 26px; font-weight: 700; }
+    .point-change { min-height: 18px; font-size: 18px; color: var(--accent); }
+    .point-change.negative { color: var(--danger); }
+    .target-control { display: flex; align-items: center; gap: 8px; flex-direction: column; }
+    .target-control input[type="range"] { width: 100%; }
+    .target-control .btn-ghost { min-width: 40px; }
+    .target-count-display { font-size: 32px; font-weight: 800; text-align: center; }
+    .target-count-controls { display: flex; align-items: center; gap: 8px; width: 100%; justify-content: center; }
+    .stepper { display: inline-flex; align-items: center; gap: 8px; }
+    .stepper .value { min-width: 28px; text-align: center; font-weight: 700; }
+    .control-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+    }
+    .modal-backdrop.hidden { display: none !important; pointer-events: none; }
+    .modal { background: #fff; border-radius: 12px; padding: 16px; width: min(640px, 94vw); box-shadow: 0 8px 24px rgba(0,0,0,0.2); }
+    .report-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+    .report-item { border: 1px solid var(--border); border-radius: 10px; padding: 10px; background: #f9fafb; }
+    @media (max-width: 720px) {
+      header { position: sticky; top: 0; }
+      .set-header { flex-direction: column; align-items: flex-start; }
+      button, input, select { width: 100%; }
+      .selection-group { flex-direction: column; align-items: stretch; }
+      .mode-toggle { width: 100%; }
+      .mode-toggle button { flex: 1; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <button class="tab-btn active" id="tab-manage">Study Sets</button>
+    <button class="tab-btn" id="tab-game">Game</button>
+    <div class="pill">Single HTML • No backend</div>
+  </header>
+
+  <div class="container">
+    <section id="manage-page" class="card">
+      <div class="flex between flex-wrap">
+        <div>
+          <h2>Study Set Management</h2>
+          <p>Build vocabulary practice sets, import from JSON, or back them up.</p>
+        </div>
+      </div>
+
+      <div class="card" id="drive-card">
+        <h3>Back Up</h3>
+        <p class="small">Save a copy to Google Drive or keep it in this browser.</p>
+        <div class="flex flex-wrap">
+          <button class="btn-ghost" id="btn-drive-connect">Connect to Google Drive</button>
+          <button class="btn-primary" id="btn-drive-save">Save sets to Google Drive</button>
+          <button class="btn-ghost" id="btn-save-local">Save sets in browser</button>
+        </div>
+        <div class="small" id="drive-msg"></div>
+      </div>
+
+      <div class="flex flex-wrap" style="gap:8px; margin-bottom:12px;">
+        <button class="btn-primary" id="btn-new-set">New Set</button>
+        <button class="btn-ghost" id="btn-import">Import JSON</button>
+      </div>
+
+      <div id="sets-list" class="grid"></div>
+    </section>
+
+    <section id="game-page" class="card hidden">
+      <div class="flex between flex-wrap">
+        <div>
+          <h2>Game</h2>
+          <p>Pick a study set, difficulty, and mode, then start a run.</p>
+        </div>
+      </div>
+
+      <div class="card" id="setup-card">
+        <div class="flex between flex-wrap">
+          <div>
+            <h3>Game Setup</h3>
+            <p class="small">Active study set, difficulty, and game mode.</p>
+          </div>
+          <button class="btn-ghost" id="toggle-setup">Collapse</button>
+        </div>
+        <div id="setup-body" class="grid" style="grid-template-columns: repeat(auto-fit,minmax(260px,1fr)); margin-top:8px;">
+          <div class="panel">
+            <h4>Game Mode</h4>
+            <div class="flex flex-wrap mode-toggle">
+              <button id="mode-survival" class="tab-btn">Survival</button>
+              <button id="mode-endless" class="tab-btn">Endless Streak</button>
+            </div>
+          </div>
+          <div class="panel">
+            <label for="set-select">Active Study Set</label>
+            <select id="set-select"></select>
+            <div class="small" id="set-hint"></div>
+          </div>
+          <div class="panel">
+            <h4>Difficulty</h4>
+            <div class="selection-group" id="difficulty-group">
+              <label><input type="radio" name="difficulty" value="easy"> Easy</label>
+              <label><input type="radio" name="difficulty" value="medium" checked> Medium</label>
+              <label><input type="radio" name="difficulty" value="hard"> Hard</label>
+            </div>
+            <div class="small">Base points per correct answer: Easy 1 · Medium 2 · Hard 3.</div>
+          </div>
+          <div class="panel">
+            <h4>Timer & Lives</h4>
+            <div class="control-row">
+              <div class="stepper">
+                <button class="btn-ghost" id="timer-decrease">-</button>
+                <span class="value" id="timer-value">5s</span>
+                <button class="btn-ghost" id="timer-increase">+</button>
+              </div>
+              <span class="small">Timer length</span>
+            </div>
+            <div class="control-row" id="lives-row">
+              <div class="stepper">
+                <button class="btn-ghost" id="lives-decrease">-</button>
+                <span class="value" id="lives-value">3</span>
+                <button class="btn-ghost" id="lives-increase">+</button>
+              </div>
+              <span class="small">Starting lives (Survival)</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h4>Best Records</h4>
+        <div id="best-survival" class="small">Survival best score: 0</div>
+        <div id="best-endless" class="small">Endless best streak: 0 · Best score: 0</div>
+      </div>
+
+      <div class="card hidden" id="status-card">
+        <div class="status-tags">
+          <div class="tag" id="status-mode"></div>
+          <div class="tag" id="status-difficulty"></div>
+        </div>
+        <div class="status-metrics">
+          <div class="status-metric">
+            <div class="small">Lives</div>
+            <div class="status-value hearts" id="lives-display"></div>
+            <div class="point-change" id="life-change"></div>
+          </div>
+          <div class="status-metric">
+            <div class="small">Total Points</div>
+            <div class="status-value score" id="status-score">0</div>
+            <div class="point-change" id="score-change"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="selection-group hidden" id="next-container" style="justify-content:flex-start;">
+        <button class="btn-primary" id="btn-next" disabled>Next Round</button>
+      </div>
+
+      <div class="card" id="game-area">
+        <div id="state-idle" class="state-block">
+          <p>Select mode, difficulty, and study set to begin.</p>
+          <div class="selection-group" style="margin-top:12px;">
+            <button class="btn-primary" id="btn-start">Start Game</button>
+            <button class="btn-ghost" id="btn-demo-test">Play Demo Test</button>
+          </div>
+          <div class="small">Demo Test uses the built-in sample set for a quick trial run.</div>
+        </div>
+
+        <div id="state-preview" class="hidden">
+          <h4 class="small">Upcoming prompt</h4>
+          <h3 id="preview-text">Prompt preview</h3>
+          <div class="selection-group" style="margin-top:12px;">
+            <button class="btn-primary" id="btn-start-timer">Start Timer</button>
+          </div>
+        </div>
+
+        <div id="state-prompt" class="hidden">
+          <h3 id="prompt-text">Prompt goes here</h3>
+          <div class="timer" id="timer">5</div>
+          <div class="progress"><div class="progress-inner" id="progress-inner"></div></div>
+          <div class="selection-group" style="margin-top:12px;">
+            <button class="btn-primary" id="btn-pause">Pause</button>
+          </div>
+        </div>
+
+        <div id="state-eval" class="hidden">
+          <h3 id="eval-prompt"></h3>
+          <p class="small" id="eval-targets"></p>
+          <h4>How did it go?</h4>
+          <div class="selection-group" id="performance-group">
+            <button data-perf="nailed" class="btn-primary">Nailed it (3 answers)</button>
+            <button data-perf="almost" class="btn-ghost">Almost (2 answers)</button>
+            <button data-perf="freeze" class="btn-danger">Brain freeze (0 answers)</button>
+          </div>
+          <h4>Target vocabulary used?</h4>
+          <div class="target-control">
+            <div class="target-count-display" id="target-count-display">0</div>
+            <div class="target-count-controls">
+              <button class="btn-ghost" id="target-decrease">-</button>
+              <input type="range" min="0" max="7" value="0" id="target-slider">
+              <button class="btn-ghost" id="target-increase">+</button>
+            </div>
+            <div class="small" id="target-count-label">Target vocabulary: 0</div>
+          </div>
+          <div id="score-breakdown" class="card" style="margin-top:12px; text-align:left;"></div>
+          <div class="selection-group" style="margin-top:12px;">
+            <button class="btn-accent" id="btn-confirm" disabled>Confirm</button>
+            <button class="btn-danger" id="btn-end">End Run</button>
+          </div>
+        </div>
+
+        <div id="state-over" class="hidden"></div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Import Modal -->
+  <div id="import-modal" class="modal-backdrop hidden">
+    <div class="modal">
+      <h3>Import Study Sets from JSON</h3>
+      <p class="small">Paste an array of study sets with <code>name</code> and <code>items</code> (each item has <code>prompt</code> and <code>targetWords</code> array).</p>
+      <textarea id="import-text" placeholder='[{"name":"My Set","items":[{"prompt":"Name 3...","targetWords":["a","b","c"]}]}]'></textarea>
+      <div class="small" id="import-error" style="color:var(--danger); min-height: 18px;"></div>
+      <div class="flex between">
+        <button class="btn-primary" id="btn-import-confirm">Import</button>
+        <button class="btn-ghost" id="btn-import-cancel">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Run Summary Modal -->
+  <div id="summary-modal" class="modal-backdrop hidden">
+    <div class="modal">
+      <h3>Run Summary</h3>
+      <div class="small" id="summary-meta"></div>
+      <ul class="report-list" id="summary-rounds"></ul>
+      <div class="small" id="summary-totals" style="margin-top:8px;"></div>
+      <div class="selection-group" style="margin-top:12px;">
+        <button class="btn-primary" id="btn-play-again">Play again (same mode)</button>
+        <button class="btn-ghost" id="btn-back">Back to Game Menu</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ---------------------------
+    // Storage helpers and defaults
+    // ---------------------------
+    const STORAGE_KEYS = {
+      sets: 'fiveSecondStudySets',
+      bestSurvival: 'fiveSecondBestScoreSurvival',
+      bestEndlessScore: 'fiveSecondBestScoreEndless',
+      bestEndlessStreak: 'fiveSecondBestStreakEndless',
+      lastSet: 'fiveSecondLastStudySetName',
+      lastDifficulty: 'fiveSecondLastDifficulty'
+    };
+    const DEFAULT_CLIENT_ID = '332987792434-u7r3hdl46asbqo0si3ngqu46kdbgf2at.apps.googleusercontent.com';
+
+    const DEMO_SET_NAME = 'Demo: Quick Start';
+    const demoSet = {
+      name: DEMO_SET_NAME,
+      isDemo: true,
+      items: [
+        { prompt: 'Name 3 animals', targetWords: ['furry', 'wild', 'pet'] },
+        { prompt: 'Name 3 household items', targetWords: ['kitchen', 'appliance', 'furniture'] },
+        { prompt: 'Name 3 sports', targetWords: ['team', 'ball', 'outdoor'] }
+      ]
+    };
+
+    const defaultSets = [
+      demoSet,
+      {
+        name: 'Fruits & Food',
+        items: [
+          { prompt: 'Name 3 fruits', targetWords: ['tropical', 'juicy', 'citrus'] },
+          { prompt: 'Name 3 green vegetables', targetWords: ['leafy', 'crunchy', 'bitter'] },
+          { prompt: 'Name 3 dairy products', targetWords: ['creamy', 'fermented', 'pasteurized'] }
+        ]
+      },
+      {
+        name: 'Daily Routines',
+        items: [
+          { prompt: 'Name 3 things you do in the morning', targetWords: ['routine', 'habit', 'prepare'] },
+          { prompt: 'Name 3 things you do before bed', targetWords: ['relax', 'unwind', 'brush'] }
+        ]
+      }
+    ];
+
+    let studySets = [];
+    let currentMode = null; // 'survival' | 'endless'
+    let currentRun = null;   // Tracks the current session data
+    let timerInterval = null;
+    let timerStart = null;
+    let timerEnd = null;
+    let timerRemaining = 5000;
+    let timerPaused = false;
+    let timerLengthSeconds = 5;
+    let startingLives = 3;
+    const MIN_TIMER_SECONDS = 3;
+    const MAX_TIMER_SECONDS = 30;
+    const MIN_LIVES = 1;
+    const MAX_LIVES = 10;
+    const POINT_CHANGE_STEP_MS = 300;
+    const DIFFICULTY_TIMERS = { easy: 8, medium: 5, hard: 4 };
+    const POINTS_PER_LIFE = 5;
+    let setupCollapsed = false;
+    let lifeChangePending = 0;
+    let scoreChangePending = 0;
+    let changeInterval = null;
+    let awaitingNext = false;
+
+    const cloneSet = (set) => ({
+      ...set,
+      items: set.items.map(item => ({ prompt: item.prompt, targetWords: [...item.targetWords] }))
+    });
+
+    function normalizeSetMeta() {
+      studySets.forEach((set, idx) => {
+        if (set._open === undefined) set._open = false;
+        if (set._editing === undefined) set._editing = false;
+        if (!Array.isArray(set.items)) set.items = [];
+      });
+    }
+
+    function ensureDemoSetInSets() {
+      const index = studySets.findIndex(s => s.isDemo || s.name === DEMO_SET_NAME);
+      const demoCopy = cloneSet(demoSet);
+      if (index === -1) {
+        studySets.unshift(demoCopy);
+      } else {
+        studySets[index] = demoCopy;
+      }
+    }
+
+    // Load study sets or use defaults
+    function loadStudySets() {
+      const saved = localStorage.getItem(STORAGE_KEYS.sets);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) {
+            studySets = parsed;
+            ensureDemoSetInSets();
+            normalizeSetMeta();
+            return;
+          }
+        } catch (e) {
+          console.warn('Failed to parse saved sets, using defaults', e);
+        }
+      }
+      studySets = defaultSets.map(cloneSet);
+      ensureDemoSetInSets();
+      normalizeSetMeta();
+    }
+
+    function saveStudySets() {
+      localStorage.setItem(STORAGE_KEYS.sets, JSON.stringify(studySets));
+      unsavedChanges = false;
+    }
+
+    function loadBestScores() {
+      return {
+        survival: Number(localStorage.getItem(STORAGE_KEYS.bestSurvival) || 0),
+        endlessScore: Number(localStorage.getItem(STORAGE_KEYS.bestEndlessScore) || 0),
+        endlessStreak: Number(localStorage.getItem(STORAGE_KEYS.bestEndlessStreak) || 0)
+      };
+    }
+
+    function updateBestScores({ survival, endlessScore, endlessStreak }) {
+      if (survival !== undefined) localStorage.setItem(STORAGE_KEYS.bestSurvival, String(survival));
+      if (endlessScore !== undefined) localStorage.setItem(STORAGE_KEYS.bestEndlessScore, String(endlessScore));
+      if (endlessStreak !== undefined) localStorage.setItem(STORAGE_KEYS.bestEndlessStreak, String(endlessStreak));
+      renderBestStats();
+    }
+
+    function getLastStudySetName() { return localStorage.getItem(STORAGE_KEYS.lastSet); }
+    function setLastStudySetName(name) { localStorage.setItem(STORAGE_KEYS.lastSet, name); }
+
+    function getLastDifficulty() { return localStorage.getItem(STORAGE_KEYS.lastDifficulty); }
+    function setLastDifficulty(diff) { localStorage.setItem(STORAGE_KEYS.lastDifficulty, diff); }
+
+    // ---------------------------
+    // Rendering helpers
+    // ---------------------------
+    function renderStudySets() {
+      const list = document.getElementById('sets-list');
+      list.innerHTML = '';
+      if (!studySets.length) {
+        list.innerHTML = '<p>No sets yet. Create a new one or import JSON.</p>';
+        return;
+      }
+      studySets.forEach((set, setIndex) => {
+        if (set._open === undefined) set._open = false;
+        if (set._editing === undefined) set._editing = false;
+        const card = document.createElement('div');
+        card.className = 'set-card';
+        card.innerHTML = `
+          <div class="set-header">
+            <div class="flex" style="flex:1 1 auto; align-items:center; gap:8px;">
+              <button class="btn-ghost toggle-open">${set._open ? 'Collapse' : 'Expand'}</button>
+              <input type="text" value="${set.name}" aria-label="Set name" data-field="name" ${set.isDemo || !set._editing ? 'disabled' : ''} />
+              ${set.isDemo ? '<span class="pill">Demo set</span>' : ''}
+            </div>
+            <span class="small">${set.items.length} items</span>
+            <div class="flex" style="gap:8px;">
+              <button class="btn-ghost edit-btn" ${set.isDemo ? 'disabled' : ''}>${set._editing ? 'Done' : 'Edit'}</button>
+              <button class="btn-danger" ${set.isDemo ? 'disabled' : ''}>${set.isDemo ? 'Locked' : 'Delete set'}</button>
+            </div>
+          </div>
+          <div class="set-body" style="display:${set._open ? 'block' : 'none'};"></div>
+          ${set._editing ? '<button class="btn-ghost add-item-btn">Add item</button>' : ''}
+        `;
+
+        const nameInput = card.querySelector('input[data-field="name"]');
+        if (!set.isDemo) {
+          nameInput.addEventListener('input', (e) => {
+            set.name = e.target.value || 'Untitled set';
+            renderSetSelect();
+            unsavedChanges = true;
+          });
+        }
+
+        const toggleBtn = card.querySelector('.toggle-open');
+        toggleBtn.addEventListener('click', () => {
+          const newState = !set._open;
+          studySets.forEach((s, i) => {
+            if (i !== setIndex) {
+              s._open = false;
+              s._editing = false;
+            }
+          });
+          set._open = newState;
+          if (!set._open) set._editing = false;
+          renderStudySets();
+        });
+
+        const editBtn = card.querySelector('.edit-btn');
+        if (!set.isDemo) {
+          editBtn.addEventListener('click', () => {
+            studySets.forEach((s, i) => {
+              if (i !== setIndex) {
+                s._open = false;
+                s._editing = false;
+              }
+            });
+            set._open = true;
+            set._editing = !set._editing;
+            renderStudySets();
+            renderSetSelect();
+          });
+        }
+
+        const deleteBtn = card.querySelector('.btn-danger');
+        if (!set.isDemo) {
+          deleteBtn.addEventListener('click', () => {
+            if (confirm('Delete this set?')) {
+              studySets.splice(setIndex, 1);
+              renderStudySets();
+              renderSetSelect();
+            }
+          });
+        }
+
+        const body = card.querySelector('.set-body');
+        set.items.forEach((item, itemIndex) => {
+          body.appendChild(renderItemRow(set, item, itemIndex, set.isDemo || !set._editing));
+        });
+
+        const addBtn = card.querySelector('.add-item-btn');
+        if (addBtn && !set.isDemo) {
+          addBtn.addEventListener('click', () => {
+            const newItem = { prompt: '', targetWords: [] };
+            set.items.push(newItem);
+            set._open = true;
+            set._editing = true;
+            body.appendChild(renderItemRow(set, newItem, set.items.length - 1));
+            renderSetSelect();
+            unsavedChanges = true;
+          });
+        }
+
+        list.appendChild(card);
+      });
+    }
+
+    function renderItemRow(set, item, itemIndex, readOnly = false) {
+      const row = document.createElement('div');
+      row.className = 'item-row';
+      row.innerHTML = `
+        <label>Prompt</label>
+        <input type="text" value="${item.prompt}" placeholder="Name 3..." ${readOnly ? 'disabled' : ''} />
+        <label>Target words (comma separated)</label>
+        <input type="text" value="${item.targetWords.join(', ')}" placeholder="tropical, juicy, citrus" ${readOnly ? 'disabled' : ''} />
+        ${readOnly ? '' : '<button class="btn-danger delete-item-btn">Delete item</button>'}
+      `;
+      const [promptInput, targetInput] = row.querySelectorAll('input');
+      if (!readOnly) {
+        promptInput.addEventListener('input', (e) => { item.prompt = e.target.value; unsavedChanges = true; });
+        targetInput.addEventListener('input', (e) => {
+          item.targetWords = e.target.value.split(',').map(w => w.trim()).filter(Boolean);
+          unsavedChanges = true;
+        });
+        const del = row.querySelector('.delete-item-btn');
+        del.addEventListener('click', () => {
+          set.items.splice(itemIndex, 1);
+          renderStudySets();
+          renderSetSelect();
+          unsavedChanges = true;
+        });
+      }
+      return row;
+    }
+
+    function renderSetSelect() {
+      const select = document.getElementById('set-select');
+      const hint = document.getElementById('set-hint');
+      select.innerHTML = '';
+      if (!studySets.length) {
+        select.disabled = true;
+        hint.textContent = 'No study sets available. Create or import one first.';
+        return;
+      }
+      select.disabled = false;
+      studySets.forEach((set) => {
+        const opt = document.createElement('option');
+        opt.value = set.name;
+        opt.textContent = `${set.name} (${set.items.length} items)`;
+        select.appendChild(opt);
+      });
+      const last = getLastStudySetName();
+      if (last && studySets.some(s => s.name === last)) {
+        select.value = last;
+      }
+      hint.textContent = 'Selected set will be used for prompts.';
+    }
+
+    function ensureGameSelection() {
+      const select = document.getElementById('set-select');
+      if (!select.options.length) return;
+      const hasUserSets = studySets.some(s => !s.isDemo);
+      const demoOption = Array.from(select.options).find(opt => opt.value === DEMO_SET_NAME);
+      if (!hasUserSets && demoOption) {
+        select.value = DEMO_SET_NAME;
+        setLastStudySetName(DEMO_SET_NAME);
+      } else if (!Array.from(select.options).some(opt => opt.value === select.value)) {
+        select.selectedIndex = 0;
+        setLastStudySetName(select.value);
+      }
+    }
+
+    function toggleSetupContainer(forceState) {
+      if (typeof forceState === 'boolean') {
+        setupCollapsed = forceState;
+      } else {
+        setupCollapsed = !setupCollapsed;
+      }
+      const body = document.getElementById('setup-body');
+      body.classList.toggle('hidden', setupCollapsed);
+      document.getElementById('toggle-setup').textContent = setupCollapsed ? 'Expand' : 'Collapse';
+    }
+
+    function updateStatus() {
+      const statusCard = document.getElementById('status-card');
+      statusCard.classList.toggle('hidden', !currentRun);
+      if (!currentRun) return;
+      const modeLabel = currentMode === 'survival' ? 'Survival' : currentMode === 'endless' ? 'Endless Streak' : 'Mode not selected';
+      document.getElementById('status-mode').textContent = modeLabel;
+      document.getElementById('status-difficulty').textContent = `Difficulty: ${currentRun.difficulty}`;
+      document.getElementById('status-score').textContent = Math.round(currentRun.score * 10) / 10;
+      const lifeChangeEl = document.getElementById('life-change');
+      const scoreChangeEl = document.getElementById('score-change');
+      lifeChangeEl.textContent = lifeChangePending ? `${lifeChangePending > 0 ? '+' : ''}${lifeChangePending}` : '';
+      lifeChangeEl.classList.toggle('negative', lifeChangePending < 0);
+      scoreChangeEl.textContent = scoreChangePending ? `${scoreChangePending > 0 ? '+' : ''}${scoreChangePending}` : '';
+      scoreChangeEl.classList.toggle('negative', scoreChangePending < 0);
+      if (currentRun.mode === 'survival') {
+        document.getElementById('lives-display').textContent = renderHearts(currentRun.lives);
+      } else {
+        document.getElementById('lives-display').textContent = '∞';
+        lifeChangeEl.textContent = '';
+      }
+    }
+
+    function showNextButton(show) {
+      const container = document.getElementById('next-container');
+      const btn = document.getElementById('btn-next');
+      container.classList.toggle('hidden', !show);
+      btn.disabled = !show;
+    }
+
+    function animatePointChanges(lifeDelta = 0, scoreDelta = 0, onDone) {
+      lifeChangePending = Number((lifeChangePending + lifeDelta).toFixed(2));
+      scoreChangePending = Number((scoreChangePending + scoreDelta).toFixed(2));
+      updateStatus();
+      if (lifeChangePending === 0 && scoreChangePending === 0) {
+        if (typeof onDone === 'function') onDone();
+        return;
+      }
+      if (changeInterval) return;
+      changeInterval = setInterval(() => {
+        let progressed = false;
+        if (currentRun) {
+          if (lifeChangePending !== 0) {
+            const lifeStep = Math.abs(lifeChangePending) >= 1 ? 1 : Math.abs(lifeChangePending);
+            const apply = Math.sign(lifeChangePending) * lifeStep;
+            currentRun.lives = Math.max(0, currentRun.lives + apply);
+            lifeChangePending = Number((lifeChangePending - apply).toFixed(2));
+            progressed = true;
+          }
+          if (scoreChangePending !== 0) {
+            const scoreStep = Math.abs(scoreChangePending) >= 1 ? 1 : Math.abs(scoreChangePending);
+            const applyScore = Math.sign(scoreChangePending) * scoreStep;
+            currentRun.score = Math.round((currentRun.score + applyScore) * 10) / 10;
+            scoreChangePending = Number((scoreChangePending - applyScore).toFixed(2));
+            progressed = true;
+          }
+          updateStatus();
+        }
+        if (!progressed || (lifeChangePending === 0 && scoreChangePending === 0)) {
+          clearInterval(changeInterval);
+          changeInterval = null;
+          if (typeof onDone === 'function') onDone();
+        }
+      }, POINT_CHANGE_STEP_MS);
+    }
+
+    function renderBestStats() {
+      const best = loadBestScores();
+      document.getElementById('best-survival').textContent = `Survival best score: ${best.survival}`;
+      document.getElementById('best-endless').textContent = `Endless best streak: ${best.endlessStreak} · Best score: ${best.endlessScore}`;
+    }
+
+    function hideSummaryModal() {
+      document.getElementById('summary-modal').classList.add('hidden');
+    }
+
+    function showSummaryModal(data) {
+      const modal = document.getElementById('summary-modal');
+      const roundsList = document.getElementById('summary-rounds');
+      const meta = document.getElementById('summary-meta');
+      const totals = document.getElementById('summary-totals');
+      meta.textContent = `Mode: ${data.mode === 'survival' ? 'Survival' : 'Endless Streak'} · Difficulty: ${data.difficulty} · Rounds: ${data.rounds}`;
+      if (!data.roundLog.length) {
+        roundsList.innerHTML = '<li class="report-item">No rounds recorded.</li>';
+      } else {
+        roundsList.innerHTML = data.roundLog.map((r, idx) => `
+          <li class="report-item">
+            <strong>Prompt ${idx + 1}:</strong> ${r.prompt}<br>
+            Answers: ${r.answers} · Target words used: ${r.targetsUsed} · Points: ${r.points}
+          </li>
+        `).join('');
+      }
+      const lifeBonus = Math.max(0, data.lifeLeft) * POINTS_PER_LIFE;
+      totals.innerHTML = `Base points: <strong>${data.score}</strong> · Lives left: ${data.lifeLeft}${data.mode === 'survival' ? ` (bonus ${lifeBonus})` : ''}<br>Total points with bonus: <strong>${Math.round((data.score + lifeBonus) * 10) / 10}</strong>`;
+      modal.classList.remove('hidden');
+    }
+
+    // ---------------------------
+    // Import / Export helpers
+    // ---------------------------
+    function downloadSets() {
+      const blob = new Blob([JSON.stringify(studySets, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'study_sets.json';
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function validateImportedSets(data) {
+      if (!Array.isArray(data)) return false;
+      return data.every(set => set && typeof set.name === 'string' && Array.isArray(set.items) && set.items.every(item => item && typeof item.prompt === 'string' && Array.isArray(item.targetWords)));
+    }
+
+    function openImportModal() {
+      document.getElementById('import-modal').classList.remove('hidden');
+      document.getElementById('import-text').value = '';
+      document.getElementById('import-error').textContent = '';
+    }
+
+    function closeImportModal() {
+      document.getElementById('import-modal').classList.add('hidden');
+    }
+
+    function handleImport() {
+      const text = document.getElementById('import-text').value;
+      const error = document.getElementById('import-error');
+      try {
+        const parsed = JSON.parse(text);
+        if (!validateImportedSets(parsed)) {
+          error.textContent = 'Invalid format. Ensure it is an array of sets with name, items, and targetWords arrays.';
+          return;
+        }
+        studySets = parsed;
+        ensureDemoSetInSets();
+        normalizeSetMeta();
+        renderStudySets();
+        renderSetSelect();
+        saveStudySets();
+        closeImportModal();
+        unsavedChanges = false;
+      } catch (e) {
+        error.textContent = 'JSON parse error: ' + e.message;
+      }
+    }
+
+    // ---------------------------
+    // Mode selection and tabs
+    // ---------------------------
+    function switchTab(target) {
+      document.getElementById('manage-page').classList.toggle('hidden', target !== 'manage');
+      document.getElementById('game-page').classList.toggle('hidden', target !== 'game');
+      document.getElementById('tab-manage').classList.toggle('active', target === 'manage');
+      document.getElementById('tab-game').classList.toggle('active', target === 'game');
+      if (target === 'game') {
+        ensureDemoSetInSets();
+        renderSetSelect();
+        ensureGameSelection();
+      }
+    }
+
+    function setMode(mode) {
+      currentMode = mode;
+      document.getElementById('mode-survival').classList.toggle('active', mode === 'survival');
+      document.getElementById('mode-endless').classList.toggle('active', mode === 'endless');
+      updateLivesVisibility();
+      updateStatus();
+    }
+
+    function updateTimerDisplay() {
+      document.getElementById('timer-value').textContent = `${timerLengthSeconds}s`;
+      document.getElementById('lives-value').textContent = startingLives;
+    }
+
+    function applyDifficultyTimerPreset(diff) {
+      const preset = DIFFICULTY_TIMERS[diff];
+      if (preset) {
+        timerLengthSeconds = preset;
+        updateTimerDisplay();
+      }
+    }
+
+    function adjustTimer(delta) {
+      timerLengthSeconds = Math.max(MIN_TIMER_SECONDS, Math.min(MAX_TIMER_SECONDS, timerLengthSeconds + delta));
+      updateTimerDisplay();
+    }
+
+    function adjustLives(delta) {
+      startingLives = Math.max(MIN_LIVES, Math.min(MAX_LIVES, startingLives + delta));
+      updateTimerDisplay();
+    }
+
+    function updateLivesVisibility() {
+      document.getElementById('lives-row').style.display = currentMode === 'survival' ? 'flex' : 'none';
+    }
+
+    // Track unsaved changes
+    let unsavedChanges = false;
+
+    // ---------------------------
+    // Game flow helpers
+    // ---------------------------
+    function getSelectedDifficulty() {
+      const checked = document.querySelector('input[name="difficulty"]:checked');
+      return checked ? checked.value : 'medium';
+    }
+
+    function difficultyMultiplier(diff) {
+      return diff === 'easy' ? 1 : diff === 'hard' ? 3 : 2;
+    }
+
+    function performanceToCorrect(perf) {
+      if (perf === 'nailed') return 3;
+      if (perf === 'almost') return 2;
+      return 0;
+    }
+
+    function renderHearts(lives) {
+      const hearts = [];
+      const full = Math.floor(lives);
+      const hasHalf = lives % 1 >= 0.5;
+      for (let i = 0; i < full; i++) hearts.push('❤️');
+      if (hasHalf && hearts.length < 3) hearts.push('💔');
+      while (hearts.length < 3) hearts.push('🤍');
+      return hearts.join('');
+    }
+
+    function startGame() {
+      if (!currentMode) {
+        alert('Please choose a mode first.');
+        return;
+      }
+      if (!studySets.length) {
+        alert('Please create or import a study set first.');
+        return;
+      }
+      const setName = document.getElementById('set-select').value;
+      const set = studySets.find(s => s.name === setName);
+      if (!set || !set.items.length) {
+        alert('Selected set has no items.');
+        return;
+      }
+      const difficulty = getSelectedDifficulty();
+      setLastDifficulty(difficulty);
+      setLastStudySetName(setName);
+      const timerDurationMs = timerLengthSeconds * 1000;
+      currentRun = {
+        mode: currentMode,
+        setName,
+        setItems: set.items,
+        difficulty,
+        lives: currentMode === 'survival' ? startingLives : null,
+        score: 0,
+        streak: 0,
+        rounds: 0,
+        lastIndex: -1,
+        timerDuration: timerDurationMs,
+        roundLog: []
+      };
+      lifeChangePending = 0;
+      scoreChangePending = 0;
+      if (changeInterval) { clearInterval(changeInterval); changeInterval = null; }
+      timerRemaining = timerDurationMs;
+      awaitingNext = false;
+      showNextButton(false);
+      toggleSetupContainer(true);
+      updateStatus();
+      hideSummaryModal();
+      goToPrompt();
+    }
+
+    function startDemoTest() {
+      ensureDemoSetInSets();
+      renderSetSelect();
+      if (!currentMode) setMode('survival');
+      const select = document.getElementById('set-select');
+      select.value = DEMO_SET_NAME;
+      startGame();
+    }
+
+    function goToPrompt() {
+      if (!currentRun) return;
+      const { setItems, lastIndex } = currentRun;
+      if (!setItems.length) return;
+      let idx = Math.floor(Math.random() * setItems.length);
+      if (setItems.length > 1 && idx === lastIndex) {
+        idx = (idx + 1) % setItems.length;
+      }
+      currentRun.lastIndex = idx;
+      const item = setItems[idx];
+      document.getElementById('prompt-text').textContent = item.prompt || 'Unnamed prompt';
+      document.getElementById('eval-prompt').textContent = item.prompt || 'Unnamed prompt';
+      document.getElementById('eval-targets').textContent = item.targetWords.length ? `Target words: ${item.targetWords.join(', ')}` : 'Target words: none provided';
+      clearSelections();
+      currentRun.currentItem = item;
+      const duration = currentRun.timerDuration || (timerLengthSeconds * 1000);
+      timerRemaining = duration;
+      timerPaused = false;
+      document.getElementById('btn-pause').textContent = 'Pause';
+      awaitingNext = false;
+      showNextButton(false);
+      document.getElementById('timer').textContent = Math.ceil(timerRemaining / 1000);
+      document.getElementById('progress-inner').style.width = '100%';
+      document.getElementById('preview-text').textContent = item.prompt || 'Unnamed prompt';
+      switchState('preview');
+    }
+
+    function startPromptTimer() {
+      if (!currentRun || document.getElementById('state-preview').classList.contains('hidden')) return;
+      switchState('prompt');
+      startTimer();
+    }
+
+    function switchState(state) {
+      ['state-idle','state-preview','state-prompt','state-eval','state-over'].forEach(id => {
+        document.getElementById(id).classList.toggle('hidden', id !== `state-${state}`);
+      });
+      if (!awaitingNext) showNextButton(false);
+      if (state === 'prompt') updateStatus();
+    }
+
+    function startTimer() {
+      if (timerInterval) clearInterval(timerInterval);
+      timerStart = performance.now();
+      timerEnd = timerStart + timerRemaining;
+      timerPaused = false;
+      timerInterval = setInterval(updateTimer, 100);
+      updateTimer();
+    }
+
+    function stopTimer() {
+      if (timerInterval) clearInterval(timerInterval);
+      timerInterval = null;
+    }
+
+    function updateTimer() {
+      const now = performance.now();
+      const remaining = Math.max(0, (timerEnd || now) - now);
+      timerRemaining = remaining;
+      const seconds = Math.ceil(remaining / 1000);
+      document.getElementById('timer').textContent = seconds;
+      const total = currentRun?.timerDuration || (timerLengthSeconds * 1000);
+      const pct = (remaining / total) * 100;
+      document.getElementById('progress-inner').style.width = pct + '%';
+      if (remaining <= 0) {
+        stopTimer();
+        openEvaluation();
+      }
+    }
+
+    function togglePause() {
+      if (!currentRun || document.getElementById('state-prompt').classList.contains('hidden')) return;
+      if (timerPaused) {
+        timerPaused = false;
+        startTimer();
+        document.getElementById('btn-pause').textContent = 'Pause';
+      } else {
+        timerPaused = true;
+        timerRemaining = Math.max(0, (timerEnd || performance.now()) - performance.now());
+        stopTimer();
+        document.getElementById('btn-pause').textContent = 'Resume';
+        document.getElementById('timer').textContent = Math.ceil(timerRemaining / 1000);
+        const total = currentRun?.timerDuration || (timerLengthSeconds * 1000);
+        document.getElementById('progress-inner').style.width = (timerRemaining / total) * 100 + '%';
+      }
+    }
+
+    function openEvaluation() {
+      stopTimer();
+      awaitingNext = false;
+      showNextButton(false);
+      switchState('eval');
+      updateStatus();
+    }
+
+    function clearSelections() {
+      selectedPerformance = null;
+      selectedTargetCount = 0;
+      document.querySelectorAll('#performance-group button').forEach(btn => btn.classList.remove('active'));
+      setTargetCount(0);
+      document.getElementById('score-breakdown').innerHTML = '';
+      document.getElementById('btn-confirm').disabled = true;
+    }
+
+    let selectedPerformance = null;
+    let selectedTargetCount = 0;
+
+    function selectPerformance(perf) {
+      selectedPerformance = perf;
+      document.querySelectorAll('#performance-group button').forEach(btn => btn.classList.toggle('active', btn.dataset.perf === perf));
+      maybeShowBreakdown();
+    }
+
+    function setTargetCount(count) {
+      selectedTargetCount = Math.max(0, Math.min(7, Number(count)));
+      const slider = document.getElementById('target-slider');
+      slider.value = selectedTargetCount;
+      document.getElementById('target-count-display').textContent = selectedTargetCount;
+      document.getElementById('target-count-label').textContent = `Target vocabulary: ${selectedTargetCount}`;
+      maybeShowBreakdown();
+    }
+
+    function maybeShowBreakdown() {
+      if (selectedPerformance === null || selectedTargetCount === null) return;
+      const diff = currentRun.difficulty;
+      const correct = performanceToCorrect(selectedPerformance);
+      const basePoints = correct * difficultyMultiplier(diff);
+      const multiplier = 1 + (selectedTargetCount * 0.5);
+      const finalPoints = Math.round(basePoints * multiplier * 10) / 10;
+      document.getElementById('score-breakdown').innerHTML = `
+        <div><strong>Base points:</strong> ${basePoints}</div>
+        <div><strong>Target words:</strong> ${selectedTargetCount}</div>
+        <div><strong>Multiplier:</strong> ${multiplier.toFixed(1)}x</div>
+        <div><strong>Points this round:</strong> ${finalPoints}</div>
+      `;
+      document.getElementById('btn-confirm').disabled = false;
+      document.getElementById('btn-confirm').dataset.finalPoints = finalPoints;
+    }
+
+    function applyRound() {
+      if (selectedPerformance === null || selectedTargetCount === null) return;
+      const finalPoints = Number(document.getElementById('btn-confirm').dataset.finalPoints || 0);
+      document.getElementById('btn-confirm').disabled = true;
+      currentRun.rounds += 1;
+      let lifeDelta = 0;
+      if (currentRun.mode === 'survival') {
+        if (selectedPerformance === 'almost') lifeDelta = -0.5;
+        if (selectedPerformance === 'freeze') lifeDelta = -1;
+      }
+      if (currentRun.mode === 'endless' && selectedPerformance === 'nailed') {
+        currentRun.streak += 1;
+      }
+      const answers = performanceToCorrect(selectedPerformance);
+      const promptText = currentRun.currentItem?.prompt || 'Unnamed prompt';
+      currentRun.roundLog.push({
+        prompt: promptText,
+        answers,
+        targetsUsed: selectedTargetCount,
+        points: finalPoints
+      });
+      document.getElementById('state-eval').classList.add('hidden');
+      document.getElementById('score-breakdown').innerHTML = '';
+      awaitingNext = false;
+      showNextButton(false);
+      const proceedAfterAnimation = () => {
+        if (!currentRun) return;
+        if (currentRun.mode === 'survival' && currentRun.lives <= 0) {
+          endRun();
+          return;
+        }
+        if (currentRun.mode === 'endless' && selectedPerformance !== 'nailed') {
+          endRun();
+          return;
+        }
+        awaitingNext = true;
+        showNextButton(true);
+      };
+      animatePointChanges(lifeDelta, finalPoints, proceedAfterAnimation);
+    }
+
+    function handleNextRound() {
+      if (!currentRun || !awaitingNext) return;
+      awaitingNext = false;
+      showNextButton(false);
+      goToPrompt();
+    }
+
+    function endRun() {
+      stopTimer();
+      if (changeInterval) {
+        clearInterval(changeInterval);
+        changeInterval = null;
+      }
+      awaitingNext = false;
+      showNextButton(false);
+      if (!currentRun) return;
+      const best = loadBestScores();
+      if (currentRun.mode === 'survival') {
+        if (currentRun.score > best.survival) {
+          best.survival = currentRun.score;
+        }
+        updateBestScores({ survival: best.survival });
+      } else {
+        if (currentRun.score > best.endlessScore) best.endlessScore = currentRun.score;
+        if (currentRun.streak > best.endlessStreak) best.endlessStreak = currentRun.streak;
+        updateBestScores({ endlessScore: best.endlessScore, endlessStreak: best.endlessStreak });
+      }
+      const lifeLeft = currentRun.mode === 'survival' ? Math.max(0, Math.round(currentRun.lives * 2) / 2) : 0;
+      const summaryData = {
+        mode: currentRun.mode,
+        difficulty: currentRun.difficulty,
+        rounds: currentRun.rounds,
+        score: Math.round(currentRun.score * 10) / 10,
+        lifeLeft,
+        roundLog: currentRun.roundLog || []
+      };
+      lifeChangePending = 0;
+      scoreChangePending = 0;
+      updateStatus();
+      currentRun = null;
+      switchState('idle');
+      showSummaryModal(summaryData);
+    }
+
+    function backToMenu() {
+      stopTimer();
+      if (changeInterval) {
+        clearInterval(changeInterval);
+        changeInterval = null;
+      }
+      lifeChangePending = 0;
+      scoreChangePending = 0;
+      currentRun = null;
+      awaitingNext = false;
+      showNextButton(false);
+      switchState('idle');
+      toggleSetupContainer(false);
+      updateStatus();
+      hideSummaryModal();
+    }
+
+    // ---------------------------
+    // Google Drive saving (optional)
+    // ---------------------------
+    async function saveToDrive() {
+      const clientId = document.getElementById('client-id').value.trim();
+      const msg = document.getElementById('drive-msg');
+      if (!clientId) {
+        msg.textContent = 'Please paste your Google OAuth Client ID first.';
+        return;
+      }
+      if (typeof gapi === 'undefined') {
+        msg.textContent = 'Google API client not available. Ensure you include it via <script src="https://apis.google.com/js/api.js"><\\/script>.';
+        return;
+      }
+      msg.textContent = 'Initializing Google API...';
+      try {
+        await new Promise((resolve) => gapi.load('client:picker:drive-share', resolve));
+        await gapi.client.init({ clientId, scope: 'https://www.googleapis.com/auth/drive.file' });
+        msg.textContent = 'Signing in...';
+        await gapi.auth2.getAuthInstance().signIn();
+        const fileContent = JSON.stringify({ studySets }, null, 2);
+        const file = new Blob([fileContent], { type: 'application/json' });
+        const metadata = { name: 'five_second_study_sets.json', mimeType: 'application/json' };
+        const form = new FormData();
+        form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+        form.append('file', file);
+        msg.textContent = 'Uploading...';
+        await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+          method: 'POST',
+          headers: new Headers({ Authorization: 'Bearer ' + gapi.auth.getToken().access_token }),
+          body: form
+        });
+        msg.textContent = 'Saved to Google Drive!';
+      } catch (err) {
+        console.error(err);
+        msg.textContent = 'Drive save failed: ' + err.message;
+      }
+    }
+
+    async function connectDrive() {
+      const msg = document.getElementById('drive-msg');
+      if (typeof gapi === 'undefined') {
+        msg.textContent = 'Google API client not available. Include https://apis.google.com/js/api.js';
+        return;
+      }
+      msg.textContent = 'Connecting to Google Drive...';
+      try {
+        await new Promise((resolve) => gapi.load('client:picker:drive-share', resolve));
+        await gapi.client.init({ clientId: DEFAULT_CLIENT_ID, scope: 'https://www.googleapis.com/auth/drive.file' });
+        await gapi.auth2.getAuthInstance().signIn();
+        msg.textContent = 'Connected to Google Drive.';
+      } catch (err) {
+        console.error(err);
+        msg.textContent = 'Drive connect failed: ' + err.message;
+      }
+    }
+
+    // ---------------------------
+    // Event listeners and init
+    // ---------------------------
+    document.getElementById('tab-manage').addEventListener('click', () => switchTab('manage'));
+    document.getElementById('tab-game').addEventListener('click', () => switchTab('game'));
+    document.getElementById('btn-new-set').addEventListener('click', () => {
+      const count = studySets.length + 1;
+      studySets.push({ name: `New Set ${count}`, items: [], _open: true, _editing: true });
+      studySets.forEach((s, i, arr) => {
+        if (i !== arr.length - 1) { s._open = false; s._editing = false; }
+      });
+      studySets = [studySets.pop(), ...studySets]; // move new set to top
+      renderStudySets();
+      renderSetSelect();
+      unsavedChanges = true;
+      // Scroll to bottom to reveal new set
+      document.getElementById('manage-page').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    document.getElementById('btn-import').addEventListener('click', openImportModal);
+    document.getElementById('btn-import-cancel').addEventListener('click', closeImportModal);
+    document.getElementById('btn-import-confirm').addEventListener('click', handleImport);
+    document.getElementById('btn-save-local').addEventListener('click', () => { saveStudySets(); alert('Saved locally.'); unsavedChanges = false; });
+    document.getElementById('btn-drive-connect').addEventListener('click', connectDrive);
+    document.getElementById('btn-drive-save').addEventListener('click', saveToDrive);
+
+    document.getElementById('set-select').addEventListener('change', (e) => setLastStudySetName(e.target.value));
+
+    document.getElementById('difficulty-group').addEventListener('change', () => {
+      const diff = getSelectedDifficulty();
+      setLastDifficulty(diff);
+      applyDifficultyTimerPreset(diff);
+    });
+
+    document.getElementById('mode-survival').addEventListener('click', () => setMode('survival'));
+    document.getElementById('mode-endless').addEventListener('click', () => setMode('endless'));
+    document.getElementById('btn-start').addEventListener('click', startGame);
+    document.getElementById('btn-demo-test').addEventListener('click', startDemoTest);
+    document.getElementById('btn-start-timer').addEventListener('click', startPromptTimer);
+    document.getElementById('btn-pause').addEventListener('click', togglePause);
+    document.getElementById('btn-end').addEventListener('click', endRun);
+    document.getElementById('btn-confirm').addEventListener('click', applyRound);
+    document.getElementById('btn-next').addEventListener('click', handleNextRound);
+    document.getElementById('btn-back').addEventListener('click', backToMenu);
+    document.getElementById('btn-play-again').addEventListener('click', () => {
+      const lastMode = currentRun ? currentRun.mode : currentMode;
+      currentRun = null;
+      setMode(lastMode);
+      startGame();
+    });
+
+    document.getElementById('performance-group').addEventListener('click', (e) => {
+      if (e.target.dataset.perf) selectPerformance(e.target.dataset.perf);
+    });
+    document.getElementById('target-slider').addEventListener('input', (e) => setTargetCount(e.target.value));
+    document.getElementById('target-decrease').addEventListener('click', () => setTargetCount(selectedTargetCount - 1));
+    document.getElementById('target-increase').addEventListener('click', () => setTargetCount(selectedTargetCount + 1));
+    document.getElementById('timer-decrease').addEventListener('click', () => adjustTimer(-1));
+    document.getElementById('timer-increase').addEventListener('click', () => adjustTimer(1));
+    document.getElementById('lives-decrease').addEventListener('click', () => adjustLives(-1));
+    document.getElementById('lives-increase').addEventListener('click', () => adjustLives(1));
+    document.getElementById('toggle-setup').addEventListener('click', () => toggleSetupContainer());
+
+    // Initialize app
+    loadStudySets();
+    renderStudySets();
+    renderSetSelect();
+    ensureGameSelection();
+    renderBestStats();
+    const lastDiff = getLastDifficulty();
+    if (lastDiff) {
+      const radio = document.querySelector(`input[name="difficulty"][value="${lastDiff}"]`);
+      if (radio) radio.checked = true;
+    }
+    applyDifficultyTimerPreset(getSelectedDifficulty());
+    window.addEventListener('beforeunload', (e) => {
+      if (unsavedChanges) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    });
+    setTargetCount(0);
+    updateTimerDisplay();
+    updateLivesVisibility();
+    showNextButton(false);
+    toggleSetupContainer(false);
+    updateStatus();
+  </script>
+</body>
+</html>
