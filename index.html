@@ -395,7 +395,11 @@
     };
     const DEFAULT_CLIENT_ID = '332987792434-u7r3hdl46asbqo0si3ngqu46kdbgf2at.apps.googleusercontent.com';
     const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
-    let gapiLoaderPromise = null;
+    const TOKEN_MARGIN_MS = 60 * 1000; // refresh slightly before expiration
+    let gsiLoaderPromise = null;
+    let tokenClient = null;
+    let accessToken = null;
+    let tokenExpiresAt = 0;
 
     const DEMO_SET_NAME = 'Demo: Quick Start';
     const demoSet = {
@@ -1224,58 +1228,64 @@
     // ---------------------------
     // Google Drive saving (optional)
     // ---------------------------
-    function loadGapiScript() {
-      if (window.gapi) return Promise.resolve();
-      if (!gapiLoaderPromise) {
-        gapiLoaderPromise = new Promise((resolve, reject) => {
+    function loadGsiScript() {
+      if (window.google && window.google.accounts && window.google.accounts.oauth2) return Promise.resolve();
+      if (!gsiLoaderPromise) {
+        gsiLoaderPromise = new Promise((resolve, reject) => {
           const script = document.createElement('script');
-          script.src = 'https://apis.google.com/js/api.js';
+          script.src = 'https://accounts.google.com/gsi/client';
           script.async = true;
           script.defer = true;
           script.onload = () => resolve();
-          script.onerror = () => reject(new Error('Failed to load Google API client.'));
+          script.onerror = () => reject(new Error('Failed to load Google Identity Services.'));
           document.head.appendChild(script);
         });
       }
-      return gapiLoaderPromise;
+      return gsiLoaderPromise;
     }
 
-    async function initDriveClient() {
-      await loadGapiScript();
-      return new Promise((resolve, reject) => {
-        gapi.load('client:auth2', async () => {
-          try {
-            await gapi.client.init({ clientId: DEFAULT_CLIENT_ID, scope: DRIVE_SCOPE });
-            resolve(gapi.auth2.getAuthInstance());
-          } catch (err) {
-            reject(err);
-          }
+    async function ensureDriveToken({ promptConsent = false } = {}) {
+      await loadGsiScript();
+      if (!tokenClient) {
+        tokenClient = google.accounts.oauth2.initTokenClient({
+          client_id: DEFAULT_CLIENT_ID,
+          scope: DRIVE_SCOPE,
+          callback: () => {}
         });
+      }
+      const shouldRefresh = !accessToken || Date.now() + TOKEN_MARGIN_MS >= tokenExpiresAt;
+      if (!shouldRefresh) return accessToken;
+
+      return new Promise((resolve, reject) => {
+        tokenClient.callback = (resp) => {
+          if (resp.error) {
+            reject(new Error(resp.error));
+            return;
+          }
+          accessToken = resp.access_token;
+          tokenExpiresAt = Date.now() + (resp.expires_in ? resp.expires_in * 1000 : 0);
+          resolve(accessToken);
+        };
+        tokenClient.requestAccessToken({ prompt: promptConsent || !accessToken ? 'consent' : '' });
       });
     }
 
-    async function ensureDriveAuth() {
+    async function connectDrive() {
       const msg = document.getElementById('drive-msg');
       msg.textContent = 'Connecting to Google Drive...';
-      const auth = await initDriveClient();
-      const user = auth.currentUser.get();
-      if (!user.isSignedIn()) {
-        await auth.signIn();
-      } else {
-        const token = user.getAuthResponse(true);
-        if (!token || token.expires_at <= Date.now()) {
-          await auth.signIn();
-        }
+      try {
+        await ensureDriveToken({ promptConsent: true });
+        msg.textContent = 'Connected to Google Drive.';
+      } catch (err) {
+        console.error(err);
+        msg.textContent = 'Drive connect failed: ' + err.message;
       }
-      msg.textContent = 'Connected to Google Drive.';
-      return auth;
     }
 
     async function saveToDrive() {
       const msg = document.getElementById('drive-msg');
       try {
-        const auth = await ensureDriveAuth();
-        const token = auth.currentUser.get().getAuthResponse(true)?.access_token;
+        const token = await ensureDriveToken();
         if (!token) {
           msg.textContent = 'Unable to obtain access token for Google Drive.';
           return;
@@ -1296,16 +1306,6 @@
       } catch (err) {
         console.error(err);
         msg.textContent = 'Drive save failed: ' + err.message;
-      }
-    }
-
-    async function connectDrive() {
-      const msg = document.getElementById('drive-msg');
-      try {
-        await ensureDriveAuth();
-      } catch (err) {
-        console.error(err);
-        msg.textContent = 'Drive connect failed: ' + err.message;
       }
     }
 
