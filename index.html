@@ -140,7 +140,7 @@
     .target-control { display: flex; align-items: center; gap: 8px; flex-direction: column; }
     .target-control input[type="range"] { width: 100%; }
     .target-control .btn-ghost { min-width: 40px; }
-    .target-count-display { font-size: 28px; font-weight: 700; text-align: center; }
+    .target-count-display { font-size: 32px; font-weight: 800; text-align: center; }
     .target-count-controls { display: flex; align-items: center; gap: 8px; width: 100%; justify-content: center; }
     .stepper { display: inline-flex; align-items: center; gap: 8px; }
     .stepper .value { min-width: 28px; text-align: center; font-weight: 700; }
@@ -156,6 +156,8 @@
     }
     .modal-backdrop.hidden { display: none !important; pointer-events: none; }
     .modal { background: #fff; border-radius: 12px; padding: 16px; width: min(640px, 94vw); box-shadow: 0 8px 24px rgba(0,0,0,0.2); }
+    .report-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+    .report-item { border: 1px solid var(--border); border-radius: 10px; padding: 10px; background: #f9fafb; }
     @media (max-width: 720px) {
       header { position: sticky; top: 0; }
       .set-header { flex-direction: column; align-items: flex-start; }
@@ -300,6 +302,15 @@
           <div class="small">Demo Test uses the built-in sample set for a quick trial run.</div>
         </div>
 
+        <div id="state-preview" class="hidden">
+          <h4 class="small">Upcoming prompt</h4>
+          <h3 id="preview-text">Prompt preview</h3>
+          <div class="small" id="preview-targets"></div>
+          <div class="selection-group" style="margin-top:12px;">
+            <button class="btn-primary" id="btn-start-timer">Start Timer</button>
+          </div>
+        </div>
+
         <div id="state-prompt" class="hidden">
           <div class="timer" id="timer">5</div>
           <div class="progress"><div class="progress-inner" id="progress-inner"></div></div>
@@ -336,14 +347,7 @@
           </div>
         </div>
 
-        <div id="state-over" class="hidden">
-          <h3 id="over-title">Run complete</h3>
-          <div id="over-details" class="small"></div>
-          <div class="selection-group" style="margin-top:12px;">
-            <button class="btn-primary" id="btn-play-again">Play again (same mode)</button>
-            <button class="btn-ghost" id="btn-back">Back to Game Menu</button>
-          </div>
-        </div>
+        <div id="state-over" class="hidden"></div>
       </div>
     </section>
   </div>
@@ -358,6 +362,20 @@
       <div class="flex between">
         <button class="btn-primary" id="btn-import-confirm">Import</button>
         <button class="btn-ghost" id="btn-import-cancel">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Run Summary Modal -->
+  <div id="summary-modal" class="modal-backdrop hidden">
+    <div class="modal">
+      <h3>Run Summary</h3>
+      <div class="small" id="summary-meta"></div>
+      <ul class="report-list" id="summary-rounds"></ul>
+      <div class="small" id="summary-totals" style="margin-top:8px;"></div>
+      <div class="selection-group" style="margin-top:12px;">
+        <button class="btn-primary" id="btn-play-again">Play again (same mode)</button>
+        <button class="btn-ghost" id="btn-back">Back to Game Menu</button>
       </div>
     </div>
   </div>
@@ -421,6 +439,8 @@
     const MIN_LIVES = 1;
     const MAX_LIVES = 10;
     const POINT_CHANGE_STEP_MS = 300;
+    const DIFFICULTY_TIMERS = { easy: 8, medium: 5, hard: 4 };
+    const POINTS_PER_LIFE = 5;
     let setupCollapsed = false;
     let lifeChangePending = 0;
     let scoreChangePending = 0;
@@ -748,6 +768,31 @@
       document.getElementById('best-endless').textContent = `Endless best streak: ${best.endlessStreak} · Best score: ${best.endlessScore}`;
     }
 
+    function hideSummaryModal() {
+      document.getElementById('summary-modal').classList.add('hidden');
+    }
+
+    function showSummaryModal(data) {
+      const modal = document.getElementById('summary-modal');
+      const roundsList = document.getElementById('summary-rounds');
+      const meta = document.getElementById('summary-meta');
+      const totals = document.getElementById('summary-totals');
+      meta.textContent = `Mode: ${data.mode === 'survival' ? 'Survival' : 'Endless Streak'} · Difficulty: ${data.difficulty} · Rounds: ${data.rounds}`;
+      if (!data.roundLog.length) {
+        roundsList.innerHTML = '<li class="report-item">No rounds recorded.</li>';
+      } else {
+        roundsList.innerHTML = data.roundLog.map((r, idx) => `
+          <li class="report-item">
+            <strong>Prompt ${idx + 1}:</strong> ${r.prompt}<br>
+            Answers: ${r.answers} · Target words used: ${r.targetsUsed} · Points: ${r.points}
+          </li>
+        `).join('');
+      }
+      const lifeBonus = Math.max(0, data.lifeLeft) * POINTS_PER_LIFE;
+      totals.innerHTML = `Base points: <strong>${data.score}</strong> · Lives left: ${data.lifeLeft}${data.mode === 'survival' ? ` (bonus ${lifeBonus})` : ''}<br>Total points with bonus: <strong>${Math.round((data.score + lifeBonus) * 10) / 10}</strong>`;
+      modal.classList.remove('hidden');
+    }
+
     // ---------------------------
     // Import / Export helpers
     // ---------------------------
@@ -826,6 +871,14 @@
       document.getElementById('lives-value').textContent = startingLives;
     }
 
+    function applyDifficultyTimerPreset(diff) {
+      const preset = DIFFICULTY_TIMERS[diff];
+      if (preset) {
+        timerLengthSeconds = preset;
+        updateTimerDisplay();
+      }
+    }
+
     function adjustTimer(delta) {
       timerLengthSeconds = Math.max(MIN_TIMER_SECONDS, Math.min(MAX_TIMER_SECONDS, timerLengthSeconds + delta));
       updateTimerDisplay();
@@ -900,7 +953,8 @@
         streak: 0,
         rounds: 0,
         lastIndex: -1,
-        timerDuration: timerDurationMs
+        timerDuration: timerDurationMs,
+        roundLog: []
       };
       lifeChangePending = 0;
       scoreChangePending = 0;
@@ -910,6 +964,7 @@
       showNextButton(false);
       toggleSetupContainer(true);
       updateStatus();
+      hideSummaryModal();
       goToPrompt();
     }
 
@@ -937,18 +992,28 @@
       document.getElementById('eval-prompt').textContent = item.prompt || 'Unnamed prompt';
       document.getElementById('eval-targets').textContent = document.getElementById('target-hint').textContent;
       clearSelections();
+      currentRun.currentItem = item;
       const duration = currentRun.timerDuration || (timerLengthSeconds * 1000);
       timerRemaining = duration;
       timerPaused = false;
       document.getElementById('btn-pause').textContent = 'Pause';
       awaitingNext = false;
       showNextButton(false);
+      document.getElementById('timer').textContent = Math.ceil(timerRemaining / 1000);
+      document.getElementById('progress-inner').style.width = '100%';
+      document.getElementById('preview-text').textContent = item.prompt || 'Unnamed prompt';
+      document.getElementById('preview-targets').textContent = item.targetWords.length ? `Target words: ${item.targetWords.join(', ')}` : 'Target words: none provided';
+      switchState('preview');
+    }
+
+    function startPromptTimer() {
+      if (!currentRun || document.getElementById('state-preview').classList.contains('hidden')) return;
       switchState('prompt');
       startTimer();
     }
 
     function switchState(state) {
-      ['state-idle','state-prompt','state-eval','state-over'].forEach(id => {
+      ['state-idle','state-preview','state-prompt','state-eval','state-over'].forEach(id => {
         document.getElementById(id).classList.toggle('hidden', id !== `state-${state}`);
       });
       if (state === 'prompt') updateStatus();
@@ -1065,6 +1130,14 @@
       if (currentRun.mode === 'endless' && selectedPerformance === 'nailed') {
         currentRun.streak += 1;
       }
+      const answers = performanceToCorrect(selectedPerformance);
+      const promptText = currentRun.currentItem?.prompt || 'Unnamed prompt';
+      currentRun.roundLog.push({
+        prompt: promptText,
+        answers,
+        targetsUsed: selectedTargetCount,
+        points: finalPoints
+      });
       document.getElementById('state-eval').classList.add('hidden');
       document.getElementById('score-breakdown').innerHTML = '';
       awaitingNext = false;
@@ -1107,19 +1180,26 @@
           best.survival = currentRun.score;
         }
         updateBestScores({ survival: best.survival });
-        document.getElementById('over-title').textContent = 'Game Over – Survival';
-        document.getElementById('over-details').innerHTML = `Score: <strong>${currentRun.score}</strong><br>Rounds played: ${currentRun.rounds}<br>Best Survival score: ${best.survival}`;
       } else {
         if (currentRun.score > best.endlessScore) best.endlessScore = currentRun.score;
         if (currentRun.streak > best.endlessStreak) best.endlessStreak = currentRun.streak;
         updateBestScores({ endlessScore: best.endlessScore, endlessStreak: best.endlessStreak });
-        document.getElementById('over-title').textContent = 'Game Over – Endless Streak';
-        document.getElementById('over-details').innerHTML = `Streak: <strong>${currentRun.streak}</strong><br>Score: ${currentRun.score}<br>Best streak: ${best.endlessStreak}<br>Best score: ${best.endlessScore}`;
       }
+      const lifeLeft = currentRun.mode === 'survival' ? Math.max(0, Math.round(currentRun.lives * 2) / 2) : 0;
+      const summaryData = {
+        mode: currentRun.mode,
+        difficulty: currentRun.difficulty,
+        rounds: currentRun.rounds,
+        score: Math.round(currentRun.score * 10) / 10,
+        lifeLeft,
+        roundLog: currentRun.roundLog || []
+      };
       lifeChangePending = 0;
       scoreChangePending = 0;
       updateStatus();
-      switchState('over');
+      currentRun = null;
+      switchState('idle');
+      showSummaryModal(summaryData);
     }
 
     function backToMenu() {
@@ -1136,6 +1216,7 @@
       switchState('idle');
       toggleSetupContainer(false);
       updateStatus();
+      hideSummaryModal();
     }
 
     // ---------------------------
@@ -1222,12 +1303,17 @@
 
     document.getElementById('set-select').addEventListener('change', (e) => setLastStudySetName(e.target.value));
 
-    document.getElementById('difficulty-group').addEventListener('change', () => setLastDifficulty(getSelectedDifficulty()));
+    document.getElementById('difficulty-group').addEventListener('change', () => {
+      const diff = getSelectedDifficulty();
+      setLastDifficulty(diff);
+      applyDifficultyTimerPreset(diff);
+    });
 
     document.getElementById('mode-survival').addEventListener('click', () => setMode('survival'));
     document.getElementById('mode-endless').addEventListener('click', () => setMode('endless'));
     document.getElementById('btn-start').addEventListener('click', startGame);
     document.getElementById('btn-demo-test').addEventListener('click', startDemoTest);
+    document.getElementById('btn-start-timer').addEventListener('click', startPromptTimer);
     document.getElementById('btn-pause').addEventListener('click', togglePause);
     document.getElementById('btn-end').addEventListener('click', endRun);
     document.getElementById('btn-confirm').addEventListener('click', applyRound);
@@ -1263,6 +1349,7 @@
       const radio = document.querySelector(`input[name="difficulty"][value="${lastDiff}"]`);
       if (radio) radio.checked = true;
     }
+    applyDifficultyTimerPreset(getSelectedDifficulty());
     window.addEventListener('beforeunload', (e) => {
       if (unsavedChanges) {
         e.preventDefault();
