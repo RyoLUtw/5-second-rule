@@ -164,11 +164,6 @@
         </div>
       </div>
 
-      <div class="flex flex-wrap" style="gap:8px; margin-bottom:12px;">
-        <button class="btn-primary" id="btn-new-set">New Set</button>
-        <button class="btn-ghost" id="btn-import">Import JSON</button>
-      </div>
-
       <div class="card" id="drive-card">
         <h3>Back Up</h3>
         <p class="small">Save a copy to Google Drive or keep it in this browser.</p>
@@ -178,6 +173,11 @@
           <button class="btn-ghost" id="btn-save-local">Save sets in browser</button>
         </div>
         <div class="small" id="drive-msg"></div>
+      </div>
+
+      <div class="flex flex-wrap" style="gap:8px; margin-bottom:12px;">
+        <button class="btn-primary" id="btn-new-set">New Set</button>
+        <button class="btn-ghost" id="btn-import">Import JSON</button>
       </div>
 
       <div id="sets-list" class="grid"></div>
@@ -439,7 +439,7 @@
             </div>
           </div>
           <div class="set-body" style="display:${set._open ? 'block' : 'none'};"></div>
-          <button class="btn-ghost add-item-btn" ${set.isDemo || !set._editing ? 'disabled' : ''}>Add item</button>
+          ${set._editing ? '<button class="btn-ghost add-item-btn">Add item</button>' : ''}
         `;
 
         const nameInput = card.querySelector('input[data-field="name"]');
@@ -498,7 +498,7 @@
         });
 
         const addBtn = card.querySelector('.add-item-btn');
-        if (!set.isDemo) {
+        if (addBtn && !set.isDemo) {
           addBtn.addEventListener('click', () => {
             const newItem = { prompt: '', targetWords: [] };
             set.items.push(newItem);
@@ -522,7 +522,7 @@
         <input type="text" value="${item.prompt}" placeholder="Name 3..." ${readOnly ? 'disabled' : ''} />
         <label>Target words (comma separated)</label>
         <input type="text" value="${item.targetWords.join(', ')}" placeholder="tropical, juicy, citrus" ${readOnly ? 'disabled' : ''} />
-        <button class="btn-danger" ${readOnly ? 'disabled' : ''}>${readOnly ? 'Locked for demo' : 'Delete item'}</button>
+        ${readOnly ? '' : '<button class="btn-danger delete-item-btn">Delete item</button>'}
       `;
       const [promptInput, targetInput] = row.querySelectorAll('input');
       if (!readOnly) {
@@ -531,7 +531,7 @@
           item.targetWords = e.target.value.split(',').map(w => w.trim()).filter(Boolean);
           unsavedChanges = true;
         });
-        const del = row.querySelector('button');
+        const del = row.querySelector('.delete-item-btn');
         del.addEventListener('click', () => {
           set.items.splice(itemIndex, 1);
           renderStudySets();
