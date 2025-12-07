@@ -137,9 +137,14 @@
     .status-value { font-size: 26px; font-weight: 700; }
     .point-change { min-height: 18px; font-size: 18px; color: var(--accent); }
     .point-change.negative { color: var(--danger); }
-    .target-control { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center; }
-    .target-control input[type="range"] { flex: 1 1 200px; min-width: 160px; }
+    .target-control { display: flex; align-items: center; gap: 8px; flex-direction: column; }
+    .target-control input[type="range"] { width: 100%; }
     .target-control .btn-ghost { min-width: 40px; }
+    .target-count-display { font-size: 28px; font-weight: 700; text-align: center; }
+    .target-count-controls { display: flex; align-items: center; gap: 8px; width: 100%; justify-content: center; }
+    .stepper { display: inline-flex; align-items: center; gap: 8px; }
+    .stepper .value { min-width: 28px; text-align: center; font-weight: 700; }
+    .control-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
     .modal-backdrop {
       position: fixed;
       inset: 0;
@@ -234,6 +239,25 @@
             </div>
             <div class="small">Base points per correct answer: Easy 1 · Medium 2 · Hard 3.</div>
           </div>
+          <div class="panel">
+            <h4>Timer & Lives</h4>
+            <div class="control-row">
+              <div class="stepper">
+                <button class="btn-ghost" id="timer-decrease">-</button>
+                <span class="value" id="timer-value">5s</span>
+                <button class="btn-ghost" id="timer-increase">+</button>
+              </div>
+              <span class="small">Timer length</span>
+            </div>
+            <div class="control-row" id="lives-row">
+              <div class="stepper">
+                <button class="btn-ghost" id="lives-decrease">-</button>
+                <span class="value" id="lives-value">3</span>
+                <button class="btn-ghost" id="lives-increase">+</button>
+              </div>
+              <span class="small">Starting lives (Survival)</span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -260,6 +284,10 @@
             <div class="point-change" id="score-change"></div>
           </div>
         </div>
+      </div>
+
+      <div class="selection-group hidden" id="next-container" style="justify-content:flex-start;">
+        <button class="btn-primary" id="btn-next" disabled>Next Round</button>
       </div>
 
       <div class="card" id="game-area">
@@ -293,14 +321,17 @@
           </div>
           <h4>Target vocabulary used?</h4>
           <div class="target-control">
-            <button class="btn-ghost" id="target-decrease">-</button>
-            <input type="range" min="0" max="7" value="0" id="target-slider">
-            <button class="btn-ghost" id="target-increase">+</button>
+            <div class="target-count-display" id="target-count-display">0</div>
+            <div class="target-count-controls">
+              <button class="btn-ghost" id="target-decrease">-</button>
+              <input type="range" min="0" max="7" value="0" id="target-slider">
+              <button class="btn-ghost" id="target-increase">+</button>
+            </div>
             <div class="small" id="target-count-label">Target vocabulary: 0</div>
           </div>
           <div id="score-breakdown" class="card" style="margin-top:12px; text-align:left;"></div>
           <div class="selection-group" style="margin-top:12px;">
-            <button class="btn-accent" id="btn-confirm" disabled>Confirm & Next</button>
+            <button class="btn-accent" id="btn-confirm" disabled>Confirm</button>
             <button class="btn-danger" id="btn-end">End Run</button>
           </div>
         </div>
@@ -383,11 +414,18 @@
     let timerEnd = null;
     let timerRemaining = 5000;
     let timerPaused = false;
-    const TIMER_DURATION = 5000; // 5 seconds in ms
+    let timerLengthSeconds = 5;
+    let startingLives = 3;
+    const MIN_TIMER_SECONDS = 3;
+    const MAX_TIMER_SECONDS = 30;
+    const MIN_LIVES = 1;
+    const MAX_LIVES = 10;
+    const POINT_CHANGE_STEP_MS = 300;
     let setupCollapsed = false;
     let lifeChangePending = 0;
     let scoreChangePending = 0;
     let changeInterval = null;
+    let awaitingNext = false;
 
     const cloneSet = (set) => ({
       ...set,
@@ -661,6 +699,13 @@
       }
     }
 
+    function showNextButton(show) {
+      const container = document.getElementById('next-container');
+      const btn = document.getElementById('btn-next');
+      container.classList.toggle('hidden', !show);
+      btn.disabled = !show;
+    }
+
     function animatePointChanges(lifeDelta = 0, scoreDelta = 0, onDone) {
       lifeChangePending = Number((lifeChangePending + lifeDelta).toFixed(2));
       scoreChangePending = Number((scoreChangePending + scoreDelta).toFixed(2));
@@ -694,7 +739,7 @@
           changeInterval = null;
           if (typeof onDone === 'function') onDone();
         }
-      }, 300);
+      }, POINT_CHANGE_STEP_MS);
     }
 
     function renderBestStats() {
@@ -772,7 +817,27 @@
       currentMode = mode;
       document.getElementById('mode-survival').classList.toggle('active', mode === 'survival');
       document.getElementById('mode-endless').classList.toggle('active', mode === 'endless');
+      updateLivesVisibility();
       updateStatus();
+    }
+
+    function updateTimerDisplay() {
+      document.getElementById('timer-value').textContent = `${timerLengthSeconds}s`;
+      document.getElementById('lives-value').textContent = startingLives;
+    }
+
+    function adjustTimer(delta) {
+      timerLengthSeconds = Math.max(MIN_TIMER_SECONDS, Math.min(MAX_TIMER_SECONDS, timerLengthSeconds + delta));
+      updateTimerDisplay();
+    }
+
+    function adjustLives(delta) {
+      startingLives = Math.max(MIN_LIVES, Math.min(MAX_LIVES, startingLives + delta));
+      updateTimerDisplay();
+    }
+
+    function updateLivesVisibility() {
+      document.getElementById('lives-row').style.display = currentMode === 'survival' ? 'flex' : 'none';
     }
 
     // Track unsaved changes
@@ -824,21 +889,25 @@
       const difficulty = getSelectedDifficulty();
       setLastDifficulty(difficulty);
       setLastStudySetName(setName);
+      const timerDurationMs = timerLengthSeconds * 1000;
       currentRun = {
         mode: currentMode,
         setName,
         setItems: set.items,
         difficulty,
-        lives: currentMode === 'survival' ? 3 : null,
+        lives: currentMode === 'survival' ? startingLives : null,
         score: 0,
         streak: 0,
         rounds: 0,
-        lastIndex: -1
+        lastIndex: -1,
+        timerDuration: timerDurationMs
       };
       lifeChangePending = 0;
       scoreChangePending = 0;
       if (changeInterval) { clearInterval(changeInterval); changeInterval = null; }
-      timerRemaining = TIMER_DURATION;
+      timerRemaining = timerDurationMs;
+      awaitingNext = false;
+      showNextButton(false);
       toggleSetupContainer(true);
       updateStatus();
       goToPrompt();
@@ -868,9 +937,12 @@
       document.getElementById('eval-prompt').textContent = item.prompt || 'Unnamed prompt';
       document.getElementById('eval-targets').textContent = document.getElementById('target-hint').textContent;
       clearSelections();
-      timerRemaining = TIMER_DURATION;
+      const duration = currentRun.timerDuration || (timerLengthSeconds * 1000);
+      timerRemaining = duration;
       timerPaused = false;
       document.getElementById('btn-pause').textContent = 'Pause';
+      awaitingNext = false;
+      showNextButton(false);
       switchState('prompt');
       startTimer();
     }
@@ -902,7 +974,8 @@
       timerRemaining = remaining;
       const seconds = Math.ceil(remaining / 1000);
       document.getElementById('timer').textContent = seconds;
-      const pct = (remaining / TIMER_DURATION) * 100;
+      const total = currentRun?.timerDuration || (timerLengthSeconds * 1000);
+      const pct = (remaining / total) * 100;
       document.getElementById('progress-inner').style.width = pct + '%';
       if (remaining <= 0) {
         stopTimer();
@@ -922,12 +995,15 @@
         stopTimer();
         document.getElementById('btn-pause').textContent = 'Resume';
         document.getElementById('timer').textContent = Math.ceil(timerRemaining / 1000);
-        document.getElementById('progress-inner').style.width = (timerRemaining / TIMER_DURATION) * 100 + '%';
+        const total = currentRun?.timerDuration || (timerLengthSeconds * 1000);
+        document.getElementById('progress-inner').style.width = (timerRemaining / total) * 100 + '%';
       }
     }
 
     function openEvaluation() {
       stopTimer();
+      awaitingNext = false;
+      showNextButton(false);
       switchState('eval');
       updateStatus();
     }
@@ -954,6 +1030,7 @@
       selectedTargetCount = Math.max(0, Math.min(7, Number(count)));
       const slider = document.getElementById('target-slider');
       slider.value = selectedTargetCount;
+      document.getElementById('target-count-display').textContent = selectedTargetCount;
       document.getElementById('target-count-label').textContent = `Target vocabulary: ${selectedTargetCount}`;
       maybeShowBreakdown();
     }
@@ -985,24 +1062,34 @@
         if (selectedPerformance === 'almost') lifeDelta = -0.5;
         if (selectedPerformance === 'freeze') lifeDelta = -1;
       }
+      if (currentRun.mode === 'endless' && selectedPerformance === 'nailed') {
+        currentRun.streak += 1;
+      }
+      document.getElementById('state-eval').classList.add('hidden');
+      document.getElementById('score-breakdown').innerHTML = '';
+      awaitingNext = false;
+      showNextButton(false);
       const proceedAfterAnimation = () => {
         if (!currentRun) return;
-        if (currentRun.mode === 'survival') {
-          if (currentRun.lives <= 0) {
-            endRun();
-          } else {
-            goToPrompt();
-          }
-        } else if (currentRun.mode === 'endless') {
-          if (selectedPerformance === 'nailed') {
-            currentRun.streak += 1;
-            goToPrompt();
-          } else {
-            endRun();
-          }
+        if (currentRun.mode === 'survival' && currentRun.lives <= 0) {
+          endRun();
+          return;
         }
+        if (currentRun.mode === 'endless' && selectedPerformance !== 'nailed') {
+          endRun();
+          return;
+        }
+        awaitingNext = true;
+        showNextButton(true);
       };
       animatePointChanges(lifeDelta, finalPoints, proceedAfterAnimation);
+    }
+
+    function handleNextRound() {
+      if (!currentRun || !awaitingNext) return;
+      awaitingNext = false;
+      showNextButton(false);
+      goToPrompt();
     }
 
     function endRun() {
@@ -1011,6 +1098,8 @@
         clearInterval(changeInterval);
         changeInterval = null;
       }
+      awaitingNext = false;
+      showNextButton(false);
       if (!currentRun) return;
       const best = loadBestScores();
       if (currentRun.mode === 'survival') {
@@ -1042,6 +1131,8 @@
       lifeChangePending = 0;
       scoreChangePending = 0;
       currentRun = null;
+      awaitingNext = false;
+      showNextButton(false);
       switchState('idle');
       toggleSetupContainer(false);
       updateStatus();
@@ -1140,6 +1231,7 @@
     document.getElementById('btn-pause').addEventListener('click', togglePause);
     document.getElementById('btn-end').addEventListener('click', endRun);
     document.getElementById('btn-confirm').addEventListener('click', applyRound);
+    document.getElementById('btn-next').addEventListener('click', handleNextRound);
     document.getElementById('btn-back').addEventListener('click', backToMenu);
     document.getElementById('btn-play-again').addEventListener('click', () => {
       const lastMode = currentRun ? currentRun.mode : currentMode;
@@ -1154,6 +1246,10 @@
     document.getElementById('target-slider').addEventListener('input', (e) => setTargetCount(e.target.value));
     document.getElementById('target-decrease').addEventListener('click', () => setTargetCount(selectedTargetCount - 1));
     document.getElementById('target-increase').addEventListener('click', () => setTargetCount(selectedTargetCount + 1));
+    document.getElementById('timer-decrease').addEventListener('click', () => adjustTimer(-1));
+    document.getElementById('timer-increase').addEventListener('click', () => adjustTimer(1));
+    document.getElementById('lives-decrease').addEventListener('click', () => adjustLives(-1));
+    document.getElementById('lives-increase').addEventListener('click', () => adjustLives(1));
     document.getElementById('toggle-setup').addEventListener('click', () => toggleSetupContainer());
 
     // Initialize app
@@ -1174,6 +1270,8 @@
       }
     });
     setTargetCount(0);
+    updateTimerDisplay();
+    updateLivesVisibility();
     toggleSetupContainer(false);
     updateStatus();
   </script>
