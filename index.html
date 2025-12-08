@@ -298,9 +298,7 @@
           <p>Select mode, difficulty, and study set to begin.</p>
           <div class="selection-group" style="margin-top:12px;">
             <button class="btn-primary" id="btn-start">Start Game</button>
-            <button class="btn-ghost" id="btn-demo-test">Play Demo Test</button>
           </div>
-          <div class="small">Demo Test uses the built-in sample set for a quick trial run.</div>
         </div>
 
         <div id="state-preview" class="hidden">
@@ -325,7 +323,6 @@
           <div class="panel" style="text-align:left;">
             <div id="eval-answers"></div>
             <p class="small" id="eval-answer-note"></p>
-            <div id="eval-targets"></div>
           </div>
           <h4>How did it go?</h4>
           <div class="selection-group" id="performance-group">
@@ -429,36 +426,6 @@
       localStorage.removeItem(STORAGE_KEYS.driveSession);
     }
 
-    const DEMO_SET_NAME = 'Demo: Quick Start';
-    const demoSet = {
-      name: DEMO_SET_NAME,
-      isDemo: true,
-      items: [
-        { prompt: 'Name 3 animals', targetWords: ['furry', 'wild', 'pet'], answers: ['cat', 'dog', 'rabbit'], distractors: [] },
-        { prompt: 'Name 3 household items', targetWords: ['kitchen', 'appliance', 'furniture'], answers: ['table', 'lamp', 'microwave'], distractors: [] },
-        { prompt: 'Name 3 sports', targetWords: ['team', 'ball', 'outdoor'], answers: ['soccer', 'basketball', 'tennis'], distractors: [] }
-      ]
-    };
-
-    const defaultSets = [
-      demoSet,
-      {
-        name: 'Fruits & Food',
-        items: [
-          { prompt: 'Name 3 fruits', targetWords: ['tropical', 'juicy', 'citrus'], answers: ['mango', 'orange', 'pineapple'], distractors: [] },
-          { prompt: 'Name 3 green vegetables', targetWords: ['leafy', 'crunchy', 'bitter'], answers: ['kale', 'broccoli', 'spinach'], distractors: [] },
-          { prompt: 'Name 3 dairy products', targetWords: ['creamy', 'fermented', 'pasteurized'], answers: ['milk', 'yogurt', 'cheese'], distractors: [] }
-        ]
-      },
-      {
-        name: 'Daily Routines',
-        items: [
-          { prompt: 'Name 3 things you do in the morning', targetWords: ['routine', 'habit', 'prepare'], answers: ['brush teeth', 'eat breakfast', 'check phone'], distractors: [] },
-          { prompt: 'Name 3 things you do before bed', targetWords: ['relax', 'unwind', 'brush'], answers: ['read', 'stretch', 'brush teeth'], distractors: [] }
-        ]
-      }
-    ];
-
     let studySets = [];
     let currentMode = null; // 'survival' | 'endless'
     let currentRun = null;   // Tracks the current session data
@@ -482,16 +449,6 @@
     let changeInterval = null;
     let awaitingNext = false;
 
-    const cloneSet = (set) => ({
-      ...set,
-      items: set.items.map(item => ({
-        prompt: item.prompt,
-        targetWords: [...(item.targetWords || [])],
-        answers: [...(item.answers || [])],
-        distractors: [...(item.distractors || [])]
-      }))
-    });
-
     function normalizeSetMeta() {
       studySets.forEach((set, idx) => {
         if (set._open === undefined) set._open = false;
@@ -505,14 +462,10 @@
       });
     }
 
-    function ensureDemoSetInSets() {
-      const index = studySets.findIndex(s => s.isDemo || s.name === DEMO_SET_NAME);
-      const demoCopy = cloneSet(demoSet);
-      if (index === -1) {
-        studySets.unshift(demoCopy);
-      } else {
-        studySets[index] = demoCopy;
-      }
+    function parseStudySetsPayload(payload) {
+      if (Array.isArray(payload)) return payload;
+      if (payload && Array.isArray(payload.studySets)) return payload.studySets;
+      return null;
     }
 
     // Load study sets or use defaults
@@ -521,18 +474,17 @@
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed)) {
-            studySets = parsed;
-            ensureDemoSetInSets();
+          const sets = parseStudySetsPayload(parsed) || parsed;
+          if (Array.isArray(sets)) {
+            studySets = sets;
             normalizeSetMeta();
             return;
           }
         } catch (e) {
-          console.warn('Failed to parse saved sets, using defaults', e);
+          console.warn('Failed to parse saved sets, starting empty', e);
         }
       }
-      studySets = defaultSets.map(cloneSet);
-      ensureDemoSetInSets();
+      studySets = [];
       normalizeSetMeta();
     }
 
@@ -581,13 +533,12 @@
           <div class="set-header">
             <div class="flex" style="flex:1 1 auto; align-items:center; gap:8px;">
               <button class="btn-ghost toggle-open">${set._open ? 'Collapse' : 'Expand'}</button>
-              <input type="text" value="${set.name}" aria-label="Set name" data-field="name" ${set.isDemo || !set._editing ? 'disabled' : ''} />
-              ${set.isDemo ? '<span class="pill">Demo set</span>' : ''}
+              <input type="text" value="${set.name}" aria-label="Set name" data-field="name" ${!set._editing ? 'disabled' : ''} />
             </div>
             <span class="small">${set.items.length} items</span>
             <div class="flex" style="gap:8px;">
-              <button class="btn-ghost edit-btn" ${set.isDemo ? 'disabled' : ''}>${set._editing ? 'Done' : 'Edit'}</button>
-              <button class="btn-danger" ${set.isDemo ? 'disabled' : ''}>${set.isDemo ? 'Locked' : 'Delete set'}</button>
+              <button class="btn-ghost edit-btn">${set._editing ? 'Done' : 'Edit'}</button>
+              <button class="btn-danger">Delete set</button>
             </div>
           </div>
           <div class="set-body" style="display:${set._open ? 'block' : 'none'};"></div>
@@ -595,13 +546,11 @@
         `;
 
         const nameInput = card.querySelector('input[data-field="name"]');
-        if (!set.isDemo) {
-          nameInput.addEventListener('input', (e) => {
-            set.name = e.target.value || 'Untitled set';
-            renderSetSelect();
-            unsavedChanges = true;
-          });
-        }
+        nameInput.addEventListener('input', (e) => {
+          set.name = e.target.value || 'Untitled set';
+          renderSetSelect();
+          unsavedChanges = true;
+        });
 
         const toggleBtn = card.querySelector('.toggle-open');
         toggleBtn.addEventListener('click', () => {
@@ -618,39 +567,36 @@
         });
 
         const editBtn = card.querySelector('.edit-btn');
-        if (!set.isDemo) {
-          editBtn.addEventListener('click', () => {
-            studySets.forEach((s, i) => {
-              if (i !== setIndex) {
-                s._open = false;
-                s._editing = false;
-              }
-            });
-            set._open = true;
-            set._editing = !set._editing;
-            renderStudySets();
-            renderSetSelect();
-          });
-        }
-
-        const deleteBtn = card.querySelector('.btn-danger');
-        if (!set.isDemo) {
-          deleteBtn.addEventListener('click', () => {
-            if (confirm('Delete this set?')) {
-              studySets.splice(setIndex, 1);
-              renderStudySets();
-              renderSetSelect();
+        editBtn.addEventListener('click', () => {
+          studySets.forEach((s, i) => {
+            if (i !== setIndex) {
+              s._open = false;
+              s._editing = false;
             }
           });
-        }
+          set._open = true;
+          set._editing = !set._editing;
+          renderStudySets();
+          renderSetSelect();
+        });
+
+        const deleteBtn = card.querySelector('.btn-danger');
+        deleteBtn.addEventListener('click', () => {
+          if (confirm('Delete this set?')) {
+            studySets.splice(setIndex, 1);
+            renderStudySets();
+            renderSetSelect();
+            unsavedChanges = true;
+          }
+        });
 
         const body = card.querySelector('.set-body');
         set.items.forEach((item, itemIndex) => {
-          body.appendChild(renderItemRow(set, item, itemIndex, set.isDemo || !set._editing));
+          body.appendChild(renderItemRow(set, item, itemIndex, !set._editing));
         });
 
         const addBtn = card.querySelector('.add-item-btn');
-        if (addBtn && !set.isDemo) {
+        if (addBtn) {
           addBtn.addEventListener('click', () => {
             const newItem = { prompt: '', targetWords: [], answers: [], distractors: [] };
             set.items.push(newItem);
@@ -674,13 +620,25 @@
         <input type="text" value="${item.prompt}" placeholder="Name 3..." ${readOnly ? 'disabled' : ''} />
         <label>Target words (comma separated)</label>
         <input type="text" value="${item.targetWords.join(', ')}" placeholder="tropical, juicy, citrus" ${readOnly ? 'disabled' : ''} />
+        <label>Sample answers (comma separated)</label>
+        <input type="text" value="${item.answers.join(', ')}" placeholder="apple, orange, banana" ${readOnly ? 'disabled' : ''} />
+        <label>Distractors (comma separated)</label>
+        <input type="text" value="${item.distractors.join(', ')}" placeholder="word that does not fit" ${readOnly ? 'disabled' : ''} />
         ${readOnly ? '' : '<button class="btn-danger delete-item-btn">Delete item</button>'}
       `;
-      const [promptInput, targetInput] = row.querySelectorAll('input');
+      const [promptInput, targetInput, answersInput, distractorsInput] = row.querySelectorAll('input');
       if (!readOnly) {
         promptInput.addEventListener('input', (e) => { item.prompt = e.target.value; unsavedChanges = true; });
         targetInput.addEventListener('input', (e) => {
           item.targetWords = e.target.value.split(',').map(w => w.trim()).filter(Boolean);
+          unsavedChanges = true;
+        });
+        answersInput.addEventListener('input', (e) => {
+          item.answers = e.target.value.split(',').map(w => w.trim()).filter(Boolean);
+          unsavedChanges = true;
+        });
+        distractorsInput.addEventListener('input', (e) => {
+          item.distractors = e.target.value.split(',').map(w => w.trim()).filter(Boolean);
           unsavedChanges = true;
         });
         const del = row.querySelector('.delete-item-btn');
@@ -720,12 +678,12 @@
     function ensureGameSelection() {
       const select = document.getElementById('set-select');
       if (!select.options.length) return;
-      const hasUserSets = studySets.some(s => !s.isDemo);
-      const demoOption = Array.from(select.options).find(opt => opt.value === DEMO_SET_NAME);
-      if (!hasUserSets && demoOption) {
-        select.value = DEMO_SET_NAME;
-        setLastStudySetName(DEMO_SET_NAME);
-      } else if (!Array.from(select.options).some(opt => opt.value === select.value)) {
+      const last = getLastStudySetName();
+      if (last && Array.from(select.options).some(opt => opt.value === last)) {
+        select.value = last;
+        return;
+      }
+      if (!Array.from(select.options).some(opt => opt.value === select.value)) {
         select.selectedIndex = 0;
         setLastStudySetName(select.value);
       }
@@ -856,6 +814,15 @@
       return data.every(set => set && typeof set.name === 'string' && Array.isArray(set.items) && set.items.every(item => item && typeof item.prompt === 'string' && Array.isArray(item.targetWords || []) && Array.isArray(item.answers || []) && Array.isArray(item.distractors || [])));
     }
 
+    function replaceStudySets(newSets) {
+      studySets = newSets;
+      normalizeSetMeta();
+      renderStudySets();
+      renderSetSelect();
+      saveStudySets();
+      unsavedChanges = false;
+    }
+
     function openImportModal() {
       document.getElementById('import-modal').classList.remove('hidden');
       document.getElementById('import-text').value = '';
@@ -871,18 +838,13 @@
       const error = document.getElementById('import-error');
       try {
         const parsed = JSON.parse(text);
-        if (!validateImportedSets(parsed)) {
+        const candidate = parseStudySetsPayload(parsed) || parsed;
+        if (!validateImportedSets(candidate)) {
           error.textContent = 'Invalid format. Ensure it is an array of sets with name, items, targetWords, answers, and distractors arrays.';
           return;
         }
-        studySets = parsed;
-        ensureDemoSetInSets();
-        normalizeSetMeta();
-        renderStudySets();
-        renderSetSelect();
-        saveStudySets();
+        replaceStudySets(candidate);
         closeImportModal();
-        unsavedChanges = false;
       } catch (e) {
         error.textContent = 'JSON parse error: ' + e.message;
       }
@@ -897,7 +859,6 @@
       document.getElementById('tab-manage').classList.toggle('active', target === 'manage');
       document.getElementById('tab-game').classList.toggle('active', target === 'game');
       if (target === 'game') {
-        ensureDemoSetInSets();
         renderSetSelect();
         ensureGameSelection();
       }
@@ -1013,15 +974,6 @@
       goToPrompt();
     }
 
-    function startDemoTest() {
-      ensureDemoSetInSets();
-      renderSetSelect();
-      if (!currentMode) setMode('survival');
-      const select = document.getElementById('set-select');
-      select.value = DEMO_SET_NAME;
-      startGame();
-    }
-
     function goToPrompt() {
       if (!currentRun) return;
       const { setItems, lastIndex } = currentRun;
@@ -1034,13 +986,14 @@
       const item = setItems[idx];
       document.getElementById('prompt-text').textContent = item.prompt || 'Unnamed prompt';
       document.getElementById('eval-prompt').textContent = item.prompt || 'Unnamed prompt';
-      const answersText = (item.answers && item.answers.length) ? item.answers.join(', ') : 'No sample answers provided.';
-      const targetText = (item.targetWords && item.targetWords.length)
-        ? item.targetWords.map(word => `<strong>${word}</strong>`).join(', ')
-        : '<em>none provided</em>';
+      const answerList = Array.isArray(item.answers) ? item.answers : [];
+      const targetWords = Array.isArray(item.targetWords) ? item.targetWords : [];
+      const targetSet = new Set(targetWords.map(w => w.toLowerCase()));
+      const answersText = answerList.length
+        ? answerList.map(ans => targetSet.has(ans.toLowerCase()) ? `<strong>${ans}</strong>` : ans).join(', ')
+        : (targetWords.length ? targetWords.map(word => `<strong>${word}</strong>`).join(', ') : 'No sample answers provided.');
       document.getElementById('eval-answers').innerHTML = `<strong>Sample answers:</strong> ${answersText}`;
-      document.getElementById('eval-answer-note').textContent = 'Use these sample answers to guide your self-evaluation.';
-      document.getElementById('eval-targets').innerHTML = `Target words: ${targetText}`;
+      document.getElementById('eval-answer-note').textContent = 'Target words are shown in bold within the sample answers.';
       clearSelections();
       currentRun.currentItem = item;
       const duration = currentRun.timerDuration || (timerLengthSeconds * 1000);
@@ -1323,7 +1276,8 @@
       msg.textContent = 'Connecting to Google Drive...';
       try {
         await ensureDriveToken({ promptConsent: true });
-        msg.textContent = 'Connected to Google Drive. You will stay signed in on this device.';
+        msg.textContent = 'Connected to Google Drive. Syncing your study sets...';
+        await syncStudySetsFromDrive();
       } catch (err) {
         console.error(err);
         msg.textContent = 'Drive connect failed: ' + err.message;
@@ -1357,16 +1311,59 @@
       }
     }
 
+    async function fetchDriveStudySets(token) {
+      const listResp = await fetch('https://www.googleapis.com/drive/v3/files?q=name%3D%27five_second_study_sets.json%27+and+trashed%3Dfalse&fields=files(id,modifiedTime,name)&orderBy=modifiedTime%20desc&pageSize=1', {
+        headers: new Headers({ Authorization: 'Bearer ' + token })
+      });
+      if (!listResp.ok) throw new Error('Unable to list study set backups on Drive.');
+      const listData = await listResp.json();
+      if (!listData.files || !listData.files.length) return null;
+      const fileId = listData.files[0].id;
+      const fileResp = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+        headers: new Headers({ Authorization: 'Bearer ' + token })
+      });
+      if (!fileResp.ok) throw new Error('Unable to download study sets from Drive.');
+      const content = await fileResp.text();
+      const parsed = JSON.parse(content);
+      const sets = parseStudySetsPayload(parsed) || parsed.studySets || parsed;
+      if (!validateImportedSets(sets)) throw new Error('Drive file is not in the expected format.');
+      return sets;
+    }
+
+    async function syncStudySetsFromDrive() {
+      const msg = document.getElementById('drive-msg');
+      msg.textContent = 'Syncing study sets from Google Drive...';
+      try {
+        const token = await ensureDriveToken({ silent: true });
+        if (!token) {
+          msg.textContent = 'Please connect to Google Drive before syncing.';
+          return;
+        }
+        const remoteSets = await fetchDriveStudySets(token);
+        if (remoteSets && remoteSets.length) {
+          replaceStudySets(remoteSets);
+          msg.textContent = 'Study sets synced from Google Drive.';
+        } else {
+          msg.textContent = 'No saved study sets found on Google Drive yet.';
+        }
+      } catch (err) {
+        console.error(err);
+        msg.textContent = 'Drive sync failed: ' + err.message;
+      }
+    }
+
     async function tryRestoreDriveConnection() {
       const msg = document.getElementById('drive-msg');
       if (restoreDriveSession()) {
         msg.textContent = 'Signed in to Google Drive. Session restored on this device.';
+        await syncStudySetsFromDrive();
         return;
       }
       try {
         const token = await ensureDriveToken({ silent: true });
         if (token) {
           msg.textContent = 'Signed in to Google Drive. Session remembered on this device.';
+          await syncStudySetsFromDrive();
         }
       } catch (e) {
         clearDriveSession();
@@ -1409,7 +1406,6 @@
     document.getElementById('mode-survival').addEventListener('click', () => setMode('survival'));
     document.getElementById('mode-endless').addEventListener('click', () => setMode('endless'));
     document.getElementById('btn-start').addEventListener('click', startGame);
-    document.getElementById('btn-demo-test').addEventListener('click', startDemoTest);
     document.getElementById('btn-start-timer').addEventListener('click', startPromptTimer);
     document.getElementById('btn-pause').addEventListener('click', togglePause);
     document.getElementById('btn-end').addEventListener('click', endRun);
