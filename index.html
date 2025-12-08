@@ -322,7 +322,11 @@
 
         <div id="state-eval" class="hidden">
           <h3 id="eval-prompt"></h3>
-          <p class="small" id="eval-targets"></p>
+          <div class="panel" style="text-align:left;">
+            <div id="eval-answers"></div>
+            <p class="small" id="eval-answer-note"></p>
+            <div id="eval-targets"></div>
+          </div>
           <h4>How did it go?</h4>
           <div class="selection-group" id="performance-group">
             <button data-perf="nailed" class="btn-primary">Nailed it (3 answers)</button>
@@ -355,8 +359,8 @@
   <div id="import-modal" class="modal-backdrop hidden">
     <div class="modal">
       <h3>Import Study Sets from JSON</h3>
-      <p class="small">Paste an array of study sets with <code>name</code> and <code>items</code> (each item has <code>prompt</code> and <code>targetWords</code> array).</p>
-      <textarea id="import-text" placeholder='[{"name":"My Set","items":[{"prompt":"Name 3...","targetWords":["a","b","c"]}]}]'></textarea>
+      <p class="small">Paste an array of study sets with <code>name</code> and <code>items</code> (each item has <code>prompt</code>, <code>targetWords</code>, <code>answers</code>, and <code>distractors</code> arrays).</p>
+      <textarea id="import-text" placeholder='[{"name":"My Set","items":[{"prompt":"Name 3...","targetWords":["a","b"],"answers":["answer 1","answer 2"],"distractors":["d1","d2"]}]}]'></textarea>
       <div class="small" id="import-error" style="color:var(--danger); min-height: 18px;"></div>
       <div class="flex between">
         <button class="btn-primary" id="btn-import-confirm">Import</button>
@@ -430,9 +434,9 @@
       name: DEMO_SET_NAME,
       isDemo: true,
       items: [
-        { prompt: 'Name 3 animals', targetWords: ['furry', 'wild', 'pet'] },
-        { prompt: 'Name 3 household items', targetWords: ['kitchen', 'appliance', 'furniture'] },
-        { prompt: 'Name 3 sports', targetWords: ['team', 'ball', 'outdoor'] }
+        { prompt: 'Name 3 animals', targetWords: ['furry', 'wild', 'pet'], answers: ['cat', 'dog', 'rabbit'], distractors: [] },
+        { prompt: 'Name 3 household items', targetWords: ['kitchen', 'appliance', 'furniture'], answers: ['table', 'lamp', 'microwave'], distractors: [] },
+        { prompt: 'Name 3 sports', targetWords: ['team', 'ball', 'outdoor'], answers: ['soccer', 'basketball', 'tennis'], distractors: [] }
       ]
     };
 
@@ -441,16 +445,16 @@
       {
         name: 'Fruits & Food',
         items: [
-          { prompt: 'Name 3 fruits', targetWords: ['tropical', 'juicy', 'citrus'] },
-          { prompt: 'Name 3 green vegetables', targetWords: ['leafy', 'crunchy', 'bitter'] },
-          { prompt: 'Name 3 dairy products', targetWords: ['creamy', 'fermented', 'pasteurized'] }
+          { prompt: 'Name 3 fruits', targetWords: ['tropical', 'juicy', 'citrus'], answers: ['mango', 'orange', 'pineapple'], distractors: [] },
+          { prompt: 'Name 3 green vegetables', targetWords: ['leafy', 'crunchy', 'bitter'], answers: ['kale', 'broccoli', 'spinach'], distractors: [] },
+          { prompt: 'Name 3 dairy products', targetWords: ['creamy', 'fermented', 'pasteurized'], answers: ['milk', 'yogurt', 'cheese'], distractors: [] }
         ]
       },
       {
         name: 'Daily Routines',
         items: [
-          { prompt: 'Name 3 things you do in the morning', targetWords: ['routine', 'habit', 'prepare'] },
-          { prompt: 'Name 3 things you do before bed', targetWords: ['relax', 'unwind', 'brush'] }
+          { prompt: 'Name 3 things you do in the morning', targetWords: ['routine', 'habit', 'prepare'], answers: ['brush teeth', 'eat breakfast', 'check phone'], distractors: [] },
+          { prompt: 'Name 3 things you do before bed', targetWords: ['relax', 'unwind', 'brush'], answers: ['read', 'stretch', 'brush teeth'], distractors: [] }
         ]
       }
     ];
@@ -480,7 +484,12 @@
 
     const cloneSet = (set) => ({
       ...set,
-      items: set.items.map(item => ({ prompt: item.prompt, targetWords: [...item.targetWords] }))
+      items: set.items.map(item => ({
+        prompt: item.prompt,
+        targetWords: [...(item.targetWords || [])],
+        answers: [...(item.answers || [])],
+        distractors: [...(item.distractors || [])]
+      }))
     });
 
     function normalizeSetMeta() {
@@ -488,6 +497,11 @@
         if (set._open === undefined) set._open = false;
         if (set._editing === undefined) set._editing = false;
         if (!Array.isArray(set.items)) set.items = [];
+        set.items.forEach((item) => {
+          if (!Array.isArray(item.targetWords)) item.targetWords = [];
+          if (!Array.isArray(item.answers)) item.answers = [];
+          if (!Array.isArray(item.distractors)) item.distractors = [];
+        });
       });
     }
 
@@ -638,7 +652,7 @@
         const addBtn = card.querySelector('.add-item-btn');
         if (addBtn && !set.isDemo) {
           addBtn.addEventListener('click', () => {
-            const newItem = { prompt: '', targetWords: [] };
+            const newItem = { prompt: '', targetWords: [], answers: [], distractors: [] };
             set.items.push(newItem);
             set._open = true;
             set._editing = true;
@@ -839,7 +853,7 @@
 
     function validateImportedSets(data) {
       if (!Array.isArray(data)) return false;
-      return data.every(set => set && typeof set.name === 'string' && Array.isArray(set.items) && set.items.every(item => item && typeof item.prompt === 'string' && Array.isArray(item.targetWords)));
+      return data.every(set => set && typeof set.name === 'string' && Array.isArray(set.items) && set.items.every(item => item && typeof item.prompt === 'string' && Array.isArray(item.targetWords || []) && Array.isArray(item.answers || []) && Array.isArray(item.distractors || [])));
     }
 
     function openImportModal() {
@@ -858,7 +872,7 @@
       try {
         const parsed = JSON.parse(text);
         if (!validateImportedSets(parsed)) {
-          error.textContent = 'Invalid format. Ensure it is an array of sets with name, items, and targetWords arrays.';
+          error.textContent = 'Invalid format. Ensure it is an array of sets with name, items, targetWords, answers, and distractors arrays.';
           return;
         }
         studySets = parsed;
@@ -1020,7 +1034,13 @@
       const item = setItems[idx];
       document.getElementById('prompt-text').textContent = item.prompt || 'Unnamed prompt';
       document.getElementById('eval-prompt').textContent = item.prompt || 'Unnamed prompt';
-      document.getElementById('eval-targets').textContent = item.targetWords.length ? `Target words: ${item.targetWords.join(', ')}` : 'Target words: none provided';
+      const answersText = (item.answers && item.answers.length) ? item.answers.join(', ') : 'No sample answers provided.';
+      const targetText = (item.targetWords && item.targetWords.length)
+        ? item.targetWords.map(word => `<strong>${word}</strong>`).join(', ')
+        : '<em>none provided</em>';
+      document.getElementById('eval-answers').innerHTML = `<strong>Sample answers:</strong> ${answersText}`;
+      document.getElementById('eval-answer-note').textContent = 'Use these sample answers to guide your self-evaluation.';
+      document.getElementById('eval-targets').innerHTML = `Target words: ${targetText}`;
       clearSelections();
       currentRun.currentItem = item;
       const duration = currentRun.timerDuration || (timerLengthSeconds * 1000);
