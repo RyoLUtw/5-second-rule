@@ -394,10 +394,14 @@
     const DEFAULT_CLIENT_ID = '332987792434-u7r3hdl46asbqo0si3ngqu46kdbgf2at.apps.googleusercontent.com';
     const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
     const TOKEN_MARGIN_MS = 60 * 1000; // refresh slightly before expiration
+    const DRIVE_AUTOSAVE_DELAY_MS = 1500;
     let gsiLoaderPromise = null;
     let tokenClient = null;
     let accessToken = null;
     let tokenExpiresAt = 0;
+    let driveAutosaveTimeout = null;
+    let driveAutosaveInFlight = false;
+    let driveAutosavePending = false;
 
     function restoreDriveSession() {
       const saved = localStorage.getItem(STORAGE_KEYS.driveSession);
@@ -445,6 +449,58 @@
       } catch (err) {
         console.error(err);
         msg.textContent = 'Signed out locally. Unable to revoke Drive session: ' + err.message;
+      }
+    }
+
+    async function uploadStudySetsToDrive(token) {
+      const fileContent = JSON.stringify({ studySets }, null, 2);
+      const file = new Blob([fileContent], { type: 'application/json' });
+      const metadata = { name: 'five_second_study_sets.json', mimeType: 'application/json' };
+      const form = new FormData();
+      form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+      form.append('file', file);
+      await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+        method: 'POST',
+        headers: new Headers({ Authorization: 'Bearer ' + token }),
+        body: form
+      });
+    }
+
+    function scheduleDriveAutosave() {
+      driveAutosavePending = true;
+      const msg = document.getElementById('drive-msg');
+      msg.textContent = 'Autosaving changes to Google Drive...';
+      if (driveAutosaveTimeout) clearTimeout(driveAutosaveTimeout);
+      driveAutosaveTimeout = setTimeout(runDriveAutosave, DRIVE_AUTOSAVE_DELAY_MS);
+    }
+
+    async function runDriveAutosave() {
+      if (driveAutosaveInFlight) {
+        driveAutosaveTimeout = setTimeout(runDriveAutosave, DRIVE_AUTOSAVE_DELAY_MS);
+        return;
+      }
+      driveAutosavePending = false;
+      driveAutosaveTimeout = null;
+      driveAutosaveInFlight = true;
+      const msg = document.getElementById('drive-msg');
+      try {
+        const token = await ensureDriveToken({ silent: true });
+        if (!token) {
+          msg.textContent = 'Connect to Google Drive to enable autosave.';
+          return;
+        }
+        msg.textContent = 'Autosaving changes to Google Drive...';
+        await uploadStudySetsToDrive(token);
+        msg.textContent = 'Changes autosaved to Google Drive.';
+        unsavedChanges = false;
+      } catch (err) {
+        console.error(err);
+        msg.textContent = 'Drive autosave failed: ' + err.message;
+      } finally {
+        driveAutosaveInFlight = false;
+        if (driveAutosavePending && !driveAutosaveTimeout) {
+          driveAutosaveTimeout = setTimeout(runDriveAutosave, DRIVE_AUTOSAVE_DELAY_MS);
+        }
       }
     }
 
@@ -509,9 +565,9 @@
       normalizeSetMeta();
     }
 
-    function saveStudySets() {
+    function saveStudySets({ markClean = true } = {}) {
       localStorage.setItem(STORAGE_KEYS.sets, JSON.stringify(studySets));
-      unsavedChanges = false;
+      if (markClean) unsavedChanges = false;
     }
 
     function loadBestScores() {
@@ -570,7 +626,7 @@
         nameInput.addEventListener('input', (e) => {
           set.name = e.target.value || 'Untitled set';
           renderSetSelect();
-          unsavedChanges = true;
+          markStudySetsChanged();
         });
 
         const toggleBtn = card.querySelector('.toggle-open');
@@ -607,7 +663,7 @@
             studySets.splice(setIndex, 1);
             renderStudySets();
             renderSetSelect();
-            unsavedChanges = true;
+            markStudySetsChanged();
           }
         });
 
@@ -625,7 +681,7 @@
             set._editing = true;
             body.appendChild(renderItemRow(set, newItem, set.items.length - 1));
             renderSetSelect();
-            unsavedChanges = true;
+            markStudySetsChanged();
           });
         }
 
@@ -649,25 +705,25 @@
       `;
       const [promptInput, targetInput, answersInput, distractorsInput] = row.querySelectorAll('input');
       if (!readOnly) {
-        promptInput.addEventListener('input', (e) => { item.prompt = e.target.value; unsavedChanges = true; });
+        promptInput.addEventListener('input', (e) => { item.prompt = e.target.value; markStudySetsChanged(); });
         targetInput.addEventListener('input', (e) => {
           item.targetWords = e.target.value.split(',').map(w => w.trim()).filter(Boolean);
-          unsavedChanges = true;
+          markStudySetsChanged();
         });
         answersInput.addEventListener('input', (e) => {
           item.answers = e.target.value.split(',').map(w => w.trim()).filter(Boolean);
-          unsavedChanges = true;
+          markStudySetsChanged();
         });
         distractorsInput.addEventListener('input', (e) => {
           item.distractors = e.target.value.split(',').map(w => w.trim()).filter(Boolean);
-          unsavedChanges = true;
+          markStudySetsChanged();
         });
         const del = row.querySelector('.delete-item-btn');
         del.addEventListener('click', () => {
           set.items.splice(itemIndex, 1);
           renderStudySets();
           renderSetSelect();
-          unsavedChanges = true;
+          markStudySetsChanged();
         });
       }
       return row;
@@ -828,13 +884,14 @@
       return data.every(set => set && typeof set.name === 'string' && Array.isArray(set.items) && set.items.every(item => item && typeof item.prompt === 'string' && Array.isArray(item.targetWords || []) && Array.isArray(item.answers || []) && Array.isArray(item.distractors || [])));
     }
 
-    function replaceStudySets(newSets) {
+    function replaceStudySets(newSets, { markClean = false, skipAutosave = false } = {}) {
       studySets = newSets;
       normalizeSetMeta();
       renderStudySets();
       renderSetSelect();
-      saveStudySets();
-      unsavedChanges = false;
+      saveStudySets({ markClean });
+      unsavedChanges = !markClean;
+      if (!markClean && !skipAutosave) scheduleDriveAutosave();
     }
 
     function appendStudySets(newSets) {
@@ -920,6 +977,11 @@
 
     // Track unsaved changes
     let unsavedChanges = false;
+
+    function markStudySetsChanged() {
+      unsavedChanges = true;
+      scheduleDriveAutosave();
+    }
 
     // ---------------------------
     // Game flow helpers
@@ -1292,18 +1354,9 @@
           return;
         }
         msg.textContent = 'Uploading study sets to Google Drive...';
-        const fileContent = JSON.stringify({ studySets }, null, 2);
-        const file = new Blob([fileContent], { type: 'application/json' });
-        const metadata = { name: 'five_second_study_sets.json', mimeType: 'application/json' };
-        const form = new FormData();
-        form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-        form.append('file', file);
-        await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
-          method: 'POST',
-          headers: new Headers({ Authorization: 'Bearer ' + token }),
-          body: form
-        });
+        await uploadStudySetsToDrive(token);
         msg.textContent = 'Saved to Google Drive!';
+        unsavedChanges = false;
       } catch (err) {
         console.error(err);
         msg.textContent = 'Drive save failed: ' + err.message;
@@ -1340,7 +1393,7 @@
         }
         const remoteSets = await fetchDriveStudySets(token);
         if (remoteSets && remoteSets.length) {
-          replaceStudySets(remoteSets);
+          replaceStudySets(remoteSets, { markClean: true, skipAutosave: true });
           msg.textContent = 'Study sets synced from Google Drive.';
         } else {
           msg.textContent = 'No saved study sets found on Google Drive yet.';
@@ -1383,14 +1436,14 @@
       studySets = [studySets.pop(), ...studySets]; // move new set to top
       renderStudySets();
       renderSetSelect();
-      unsavedChanges = true;
+      markStudySetsChanged();
       // Scroll to bottom to reveal new set
       document.getElementById('manage-page').scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
     document.getElementById('btn-import').addEventListener('click', openImportModal);
     document.getElementById('btn-import-cancel').addEventListener('click', closeImportModal);
     document.getElementById('btn-import-confirm').addEventListener('click', handleImport);
-    document.getElementById('btn-save-local').addEventListener('click', () => { saveStudySets(); alert('Saved locally.'); unsavedChanges = false; });
+    document.getElementById('btn-save-local').addEventListener('click', () => { saveStudySets(); alert('Saved locally.'); });
     document.getElementById('btn-drive-connect').addEventListener('click', connectDrive);
     document.getElementById('btn-drive-signout').addEventListener('click', signOutDrive);
     document.getElementById('btn-drive-save').addEventListener('click', saveToDrive);
