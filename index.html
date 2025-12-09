@@ -190,6 +190,7 @@
         <div class="small">You will stay signed in on this device after connecting.</div>
         <div class="flex flex-wrap">
           <button class="btn-ghost" id="btn-drive-connect">Connect to Google Drive</button>
+          <button class="btn-ghost" id="btn-drive-signout">Sign out</button>
           <button class="btn-primary" id="btn-drive-save">Save sets to Google Drive</button>
           <button class="btn-ghost" id="btn-save-local">Save sets in browser</button>
         </div>
@@ -421,6 +422,30 @@
 
     function clearDriveSession() {
       localStorage.removeItem(STORAGE_KEYS.driveSession);
+    }
+
+    async function signOutDrive() {
+      const msg = document.getElementById('drive-msg');
+      msg.textContent = 'Signing out of Google Drive...';
+      try {
+        const tokenToRevoke = accessToken;
+        accessToken = null;
+        tokenExpiresAt = 0;
+        clearDriveSession();
+        await loadGsiScript();
+        if (tokenToRevoke && window.google?.accounts?.oauth2?.revoke) {
+          await new Promise((resolve, reject) => {
+            window.google.accounts.oauth2.revoke(tokenToRevoke, ({ successful }) => {
+              if (successful) resolve();
+              else reject(new Error('Token revocation failed.'));
+            });
+          });
+        }
+        msg.textContent = 'Signed out of Google Drive for this app.';
+      } catch (err) {
+        console.error(err);
+        msg.textContent = 'Signed out locally. Unable to revoke Drive session: ' + err.message;
+      }
     }
 
     let studySets = [];
@@ -1367,6 +1392,7 @@
     document.getElementById('btn-import-confirm').addEventListener('click', handleImport);
     document.getElementById('btn-save-local').addEventListener('click', () => { saveStudySets(); alert('Saved locally.'); unsavedChanges = false; });
     document.getElementById('btn-drive-connect').addEventListener('click', connectDrive);
+    document.getElementById('btn-drive-signout').addEventListener('click', signOutDrive);
     document.getElementById('btn-drive-save').addEventListener('click', saveToDrive);
 
     document.getElementById('set-select').addEventListener('change', (e) => setLastStudySetName(e.target.value));
