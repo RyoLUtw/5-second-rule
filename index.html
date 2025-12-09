@@ -289,9 +289,6 @@
         </div>
       </div>
 
-      <div class="selection-group hidden" id="next-container" style="justify-content:flex-start;">
-        <button class="btn-primary" id="btn-next" disabled>Next Round</button>
-      </div>
 
       <div class="card" id="game-area">
         <div id="state-idle" class="state-block">
@@ -447,7 +444,6 @@
     let lifeChangePending = 0;
     let scoreChangePending = 0;
     let changeInterval = null;
-    let awaitingNext = false;
 
     function normalizeSetMeta() {
       studySets.forEach((set, idx) => {
@@ -722,13 +718,6 @@
       }
     }
 
-    function showNextButton(show) {
-      const container = document.getElementById('next-container');
-      const btn = document.getElementById('btn-next');
-      container.classList.toggle('hidden', !show);
-      btn.disabled = !show;
-    }
-
     function animatePointChanges(lifeDelta = 0, scoreDelta = 0, onDone) {
       lifeChangePending = Number((lifeChangePending + lifeDelta).toFixed(2));
       scoreChangePending = Number((scoreChangePending + scoreDelta).toFixed(2));
@@ -823,6 +812,11 @@
       unsavedChanges = false;
     }
 
+    function appendStudySets(newSets) {
+      const combined = [...studySets, ...newSets];
+      replaceStudySets(combined);
+    }
+
     function openImportModal() {
       document.getElementById('import-modal').classList.remove('hidden');
       document.getElementById('import-text').value = '';
@@ -843,7 +837,7 @@
           error.textContent = 'Invalid format. Ensure it is an array of sets with name, items, targetWords, answers, and distractors arrays.';
           return;
         }
-        replaceStudySets(candidate);
+        appendStudySets(candidate);
         closeImportModal();
       } catch (e) {
         error.textContent = 'JSON parse error: ' + e.message;
@@ -966,8 +960,6 @@
       scoreChangePending = 0;
       if (changeInterval) { clearInterval(changeInterval); changeInterval = null; }
       timerRemaining = timerDurationMs;
-      awaitingNext = false;
-      showNextButton(false);
       toggleSetupContainer(true);
       updateStatus();
       hideSummaryModal();
@@ -1000,8 +992,6 @@
       timerRemaining = duration;
       timerPaused = false;
       document.getElementById('btn-pause').textContent = 'Pause';
-      awaitingNext = false;
-      showNextButton(false);
       document.getElementById('timer').textContent = Math.ceil(timerRemaining / 1000);
       document.getElementById('progress-inner').style.width = '100%';
       document.getElementById('preview-text').textContent = item.prompt || 'Unnamed prompt';
@@ -1018,7 +1008,6 @@
       ['state-idle','state-preview','state-prompt','state-eval','state-over'].forEach(id => {
         document.getElementById(id).classList.toggle('hidden', id !== `state-${state}`);
       });
-      if (!awaitingNext) showNextButton(false);
       if (state === 'prompt') updateStatus();
     }
 
@@ -1070,8 +1059,6 @@
 
     function openEvaluation() {
       stopTimer();
-      awaitingNext = false;
-      showNextButton(false);
       switchState('eval');
       updateStatus();
     }
@@ -1141,31 +1128,22 @@
         targetsUsed: selectedTargetCount,
         points: finalPoints
       });
-      document.getElementById('state-eval').classList.add('hidden');
       document.getElementById('score-breakdown').innerHTML = '';
-      awaitingNext = false;
-      showNextButton(false);
+      const projectedLives = currentRun.mode === 'survival' ? currentRun.lives + lifeDelta : null;
+      const survivalWillEnd = currentRun.mode === 'survival' && projectedLives <= 0;
+      const endlessWillEnd = currentRun.mode === 'endless' && selectedPerformance !== 'nailed';
+      const willContinue = !(survivalWillEnd || endlessWillEnd);
+      if (willContinue) {
+        document.getElementById('state-eval').classList.add('hidden');
+        goToPrompt();
+      }
       const proceedAfterAnimation = () => {
         if (!currentRun) return;
-        if (currentRun.mode === 'survival' && currentRun.lives <= 0) {
+        if (!willContinue) {
           endRun();
-          return;
         }
-        if (currentRun.mode === 'endless' && selectedPerformance !== 'nailed') {
-          endRun();
-          return;
-        }
-        awaitingNext = true;
-        showNextButton(true);
       };
       animatePointChanges(lifeDelta, finalPoints, proceedAfterAnimation);
-    }
-
-    function handleNextRound() {
-      if (!currentRun || !awaitingNext) return;
-      awaitingNext = false;
-      showNextButton(false);
-      goToPrompt();
     }
 
     function endRun() {
@@ -1174,8 +1152,6 @@
         clearInterval(changeInterval);
         changeInterval = null;
       }
-      awaitingNext = false;
-      showNextButton(false);
       if (!currentRun) return;
       const best = loadBestScores();
       if (currentRun.mode === 'survival') {
@@ -1214,8 +1190,6 @@
       lifeChangePending = 0;
       scoreChangePending = 0;
       currentRun = null;
-      awaitingNext = false;
-      showNextButton(false);
       switchState('idle');
       toggleSetupContainer(false);
       updateStatus();
@@ -1410,7 +1384,6 @@
     document.getElementById('btn-pause').addEventListener('click', togglePause);
     document.getElementById('btn-end').addEventListener('click', endRun);
     document.getElementById('btn-confirm').addEventListener('click', applyRound);
-    document.getElementById('btn-next').addEventListener('click', handleNextRound);
     document.getElementById('btn-back').addEventListener('click', backToMenu);
     document.getElementById('btn-play-again').addEventListener('click', () => {
       const lastMode = currentRun ? currentRun.mode : currentMode;
@@ -1453,7 +1426,6 @@
     setTargetCount(0);
     updateTimerDisplay();
     updateLivesVisibility();
-    showNextButton(false);
     toggleSetupContainer(false);
     updateStatus();
   </script>
