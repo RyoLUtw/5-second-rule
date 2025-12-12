@@ -190,6 +190,7 @@
         <div class="small">You will stay signed in on this device after connecting.</div>
         <div class="flex flex-wrap">
           <button class="btn-ghost" id="btn-drive-connect">Connect to Google Drive</button>
+          <button class="btn-ghost" id="btn-drive-signout">Sign out</button>
           <button class="btn-primary" id="btn-drive-save">Save sets to Google Drive</button>
           <button class="btn-ghost" id="btn-save-local">Save sets in browser</button>
         </div>
@@ -289,9 +290,6 @@
         </div>
       </div>
 
-      <div class="selection-group hidden" id="next-container" style="justify-content:flex-start;">
-        <button class="btn-primary" id="btn-next" disabled>Next Round</button>
-      </div>
 
       <div class="card" id="game-area">
         <div id="state-idle" class="state-block">
@@ -396,10 +394,14 @@
     const DEFAULT_CLIENT_ID = '332987792434-u7r3hdl46asbqo0si3ngqu46kdbgf2at.apps.googleusercontent.com';
     const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
     const TOKEN_MARGIN_MS = 60 * 1000; // refresh slightly before expiration
+    const DRIVE_AUTOSAVE_DELAY_MS = 1500;
     let gsiLoaderPromise = null;
     let tokenClient = null;
     let accessToken = null;
     let tokenExpiresAt = 0;
+    let driveAutosaveTimeout = null;
+    let driveAutosaveInFlight = false;
+    let driveAutosavePending = false;
 
     function restoreDriveSession() {
       const saved = localStorage.getItem(STORAGE_KEYS.driveSession);
@@ -426,6 +428,82 @@
       localStorage.removeItem(STORAGE_KEYS.driveSession);
     }
 
+    async function signOutDrive() {
+      const msg = document.getElementById('drive-msg');
+      msg.textContent = 'Signing out of Google Drive...';
+      try {
+        const tokenToRevoke = accessToken;
+        accessToken = null;
+        tokenExpiresAt = 0;
+        clearDriveSession();
+        await loadGsiScript();
+        if (tokenToRevoke && window.google?.accounts?.oauth2?.revoke) {
+          await new Promise((resolve, reject) => {
+            window.google.accounts.oauth2.revoke(tokenToRevoke, ({ successful }) => {
+              if (successful) resolve();
+              else reject(new Error('Token revocation failed.'));
+            });
+          });
+        }
+        msg.textContent = 'Signed out of Google Drive for this app.';
+      } catch (err) {
+        console.error(err);
+        msg.textContent = 'Signed out locally. Unable to revoke Drive session: ' + err.message;
+      }
+    }
+
+    async function uploadStudySetsToDrive(token) {
+      const fileContent = JSON.stringify({ studySets }, null, 2);
+      const file = new Blob([fileContent], { type: 'application/json' });
+      const metadata = { name: 'five_second_study_sets.json', mimeType: 'application/json' };
+      const form = new FormData();
+      form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+      form.append('file', file);
+      await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+        method: 'POST',
+        headers: new Headers({ Authorization: 'Bearer ' + token }),
+        body: form
+      });
+    }
+
+    function scheduleDriveAutosave() {
+      driveAutosavePending = true;
+      const msg = document.getElementById('drive-msg');
+      msg.textContent = 'Autosaving changes to Google Drive...';
+      if (driveAutosaveTimeout) clearTimeout(driveAutosaveTimeout);
+      driveAutosaveTimeout = setTimeout(runDriveAutosave, DRIVE_AUTOSAVE_DELAY_MS);
+    }
+
+    async function runDriveAutosave() {
+      if (driveAutosaveInFlight) {
+        driveAutosaveTimeout = setTimeout(runDriveAutosave, DRIVE_AUTOSAVE_DELAY_MS);
+        return;
+      }
+      driveAutosavePending = false;
+      driveAutosaveTimeout = null;
+      driveAutosaveInFlight = true;
+      const msg = document.getElementById('drive-msg');
+      try {
+        const token = await ensureDriveToken({ silent: true });
+        if (!token) {
+          msg.textContent = 'Connect to Google Drive to enable autosave.';
+          return;
+        }
+        msg.textContent = 'Autosaving changes to Google Drive...';
+        await uploadStudySetsToDrive(token);
+        msg.textContent = 'Changes autosaved to Google Drive.';
+        unsavedChanges = false;
+      } catch (err) {
+        console.error(err);
+        msg.textContent = 'Drive autosave failed: ' + err.message;
+      } finally {
+        driveAutosaveInFlight = false;
+        if (driveAutosavePending && !driveAutosaveTimeout) {
+          driveAutosaveTimeout = setTimeout(runDriveAutosave, DRIVE_AUTOSAVE_DELAY_MS);
+        }
+      }
+    }
+
     let studySets = [];
     let currentMode = null; // 'survival' | 'endless'
     let currentRun = null;   // Tracks the current session data
@@ -447,7 +525,6 @@
     let lifeChangePending = 0;
     let scoreChangePending = 0;
     let changeInterval = null;
-    let awaitingNext = false;
 
     function normalizeSetMeta() {
       studySets.forEach((set, idx) => {
@@ -488,9 +565,9 @@
       normalizeSetMeta();
     }
 
-    function saveStudySets() {
+    function saveStudySets({ markClean = true } = {}) {
       localStorage.setItem(STORAGE_KEYS.sets, JSON.stringify(studySets));
-      unsavedChanges = false;
+      if (markClean) unsavedChanges = false;
     }
 
     function loadBestScores() {
@@ -549,7 +626,7 @@
         nameInput.addEventListener('input', (e) => {
           set.name = e.target.value || 'Untitled set';
           renderSetSelect();
-          unsavedChanges = true;
+          markStudySetsChanged();
         });
 
         const toggleBtn = card.querySelector('.toggle-open');
@@ -586,7 +663,7 @@
             studySets.splice(setIndex, 1);
             renderStudySets();
             renderSetSelect();
-            unsavedChanges = true;
+            markStudySetsChanged();
           }
         });
 
@@ -604,7 +681,7 @@
             set._editing = true;
             body.appendChild(renderItemRow(set, newItem, set.items.length - 1));
             renderSetSelect();
-            unsavedChanges = true;
+            markStudySetsChanged();
           });
         }
 
@@ -628,25 +705,25 @@
       `;
       const [promptInput, targetInput, answersInput, distractorsInput] = row.querySelectorAll('input');
       if (!readOnly) {
-        promptInput.addEventListener('input', (e) => { item.prompt = e.target.value; unsavedChanges = true; });
+        promptInput.addEventListener('input', (e) => { item.prompt = e.target.value; markStudySetsChanged(); });
         targetInput.addEventListener('input', (e) => {
           item.targetWords = e.target.value.split(',').map(w => w.trim()).filter(Boolean);
-          unsavedChanges = true;
+          markStudySetsChanged();
         });
         answersInput.addEventListener('input', (e) => {
           item.answers = e.target.value.split(',').map(w => w.trim()).filter(Boolean);
-          unsavedChanges = true;
+          markStudySetsChanged();
         });
         distractorsInput.addEventListener('input', (e) => {
           item.distractors = e.target.value.split(',').map(w => w.trim()).filter(Boolean);
-          unsavedChanges = true;
+          markStudySetsChanged();
         });
         const del = row.querySelector('.delete-item-btn');
         del.addEventListener('click', () => {
           set.items.splice(itemIndex, 1);
           renderStudySets();
           renderSetSelect();
-          unsavedChanges = true;
+          markStudySetsChanged();
         });
       }
       return row;
@@ -720,13 +797,6 @@
         document.getElementById('lives-display').textContent = '∞';
         lifeChangeEl.textContent = '';
       }
-    }
-
-    function showNextButton(show) {
-      const container = document.getElementById('next-container');
-      const btn = document.getElementById('btn-next');
-      container.classList.toggle('hidden', !show);
-      btn.disabled = !show;
     }
 
     function animatePointChanges(lifeDelta = 0, scoreDelta = 0, onDone) {
@@ -814,13 +884,19 @@
       return data.every(set => set && typeof set.name === 'string' && Array.isArray(set.items) && set.items.every(item => item && typeof item.prompt === 'string' && Array.isArray(item.targetWords || []) && Array.isArray(item.answers || []) && Array.isArray(item.distractors || [])));
     }
 
-    function replaceStudySets(newSets) {
+    function replaceStudySets(newSets, { markClean = false, skipAutosave = false } = {}) {
       studySets = newSets;
       normalizeSetMeta();
       renderStudySets();
       renderSetSelect();
-      saveStudySets();
-      unsavedChanges = false;
+      saveStudySets({ markClean });
+      unsavedChanges = !markClean;
+      if (!markClean && !skipAutosave) scheduleDriveAutosave();
+    }
+
+    function appendStudySets(newSets) {
+      const combined = [...studySets, ...newSets];
+      replaceStudySets(combined);
     }
 
     function openImportModal() {
@@ -843,7 +919,7 @@
           error.textContent = 'Invalid format. Ensure it is an array of sets with name, items, targetWords, answers, and distractors arrays.';
           return;
         }
-        replaceStudySets(candidate);
+        appendStudySets(candidate);
         closeImportModal();
       } catch (e) {
         error.textContent = 'JSON parse error: ' + e.message;
@@ -901,6 +977,11 @@
 
     // Track unsaved changes
     let unsavedChanges = false;
+
+    function markStudySetsChanged() {
+      unsavedChanges = true;
+      scheduleDriveAutosave();
+    }
 
     // ---------------------------
     // Game flow helpers
@@ -966,8 +1047,6 @@
       scoreChangePending = 0;
       if (changeInterval) { clearInterval(changeInterval); changeInterval = null; }
       timerRemaining = timerDurationMs;
-      awaitingNext = false;
-      showNextButton(false);
       toggleSetupContainer(true);
       updateStatus();
       hideSummaryModal();
@@ -1000,8 +1079,6 @@
       timerRemaining = duration;
       timerPaused = false;
       document.getElementById('btn-pause').textContent = 'Pause';
-      awaitingNext = false;
-      showNextButton(false);
       document.getElementById('timer').textContent = Math.ceil(timerRemaining / 1000);
       document.getElementById('progress-inner').style.width = '100%';
       document.getElementById('preview-text').textContent = item.prompt || 'Unnamed prompt';
@@ -1018,7 +1095,6 @@
       ['state-idle','state-preview','state-prompt','state-eval','state-over'].forEach(id => {
         document.getElementById(id).classList.toggle('hidden', id !== `state-${state}`);
       });
-      if (!awaitingNext) showNextButton(false);
       if (state === 'prompt') updateStatus();
     }
 
@@ -1070,8 +1146,6 @@
 
     function openEvaluation() {
       stopTimer();
-      awaitingNext = false;
-      showNextButton(false);
       switchState('eval');
       updateStatus();
     }
@@ -1141,31 +1215,22 @@
         targetsUsed: selectedTargetCount,
         points: finalPoints
       });
-      document.getElementById('state-eval').classList.add('hidden');
       document.getElementById('score-breakdown').innerHTML = '';
-      awaitingNext = false;
-      showNextButton(false);
+      const projectedLives = currentRun.mode === 'survival' ? currentRun.lives + lifeDelta : null;
+      const survivalWillEnd = currentRun.mode === 'survival' && projectedLives <= 0;
+      const endlessWillEnd = currentRun.mode === 'endless' && selectedPerformance !== 'nailed';
+      const willContinue = !(survivalWillEnd || endlessWillEnd);
+      if (willContinue) {
+        document.getElementById('state-eval').classList.add('hidden');
+        goToPrompt();
+      }
       const proceedAfterAnimation = () => {
         if (!currentRun) return;
-        if (currentRun.mode === 'survival' && currentRun.lives <= 0) {
+        if (!willContinue) {
           endRun();
-          return;
         }
-        if (currentRun.mode === 'endless' && selectedPerformance !== 'nailed') {
-          endRun();
-          return;
-        }
-        awaitingNext = true;
-        showNextButton(true);
       };
       animatePointChanges(lifeDelta, finalPoints, proceedAfterAnimation);
-    }
-
-    function handleNextRound() {
-      if (!currentRun || !awaitingNext) return;
-      awaitingNext = false;
-      showNextButton(false);
-      goToPrompt();
     }
 
     function endRun() {
@@ -1174,8 +1239,6 @@
         clearInterval(changeInterval);
         changeInterval = null;
       }
-      awaitingNext = false;
-      showNextButton(false);
       if (!currentRun) return;
       const best = loadBestScores();
       if (currentRun.mode === 'survival') {
@@ -1214,8 +1277,6 @@
       lifeChangePending = 0;
       scoreChangePending = 0;
       currentRun = null;
-      awaitingNext = false;
-      showNextButton(false);
       switchState('idle');
       toggleSetupContainer(false);
       updateStatus();
@@ -1293,18 +1354,9 @@
           return;
         }
         msg.textContent = 'Uploading study sets to Google Drive...';
-        const fileContent = JSON.stringify({ studySets }, null, 2);
-        const file = new Blob([fileContent], { type: 'application/json' });
-        const metadata = { name: 'five_second_study_sets.json', mimeType: 'application/json' };
-        const form = new FormData();
-        form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-        form.append('file', file);
-        await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
-          method: 'POST',
-          headers: new Headers({ Authorization: 'Bearer ' + token }),
-          body: form
-        });
+        await uploadStudySetsToDrive(token);
         msg.textContent = 'Saved to Google Drive!';
+        unsavedChanges = false;
       } catch (err) {
         console.error(err);
         msg.textContent = 'Drive save failed: ' + err.message;
@@ -1341,7 +1393,7 @@
         }
         const remoteSets = await fetchDriveStudySets(token);
         if (remoteSets && remoteSets.length) {
-          replaceStudySets(remoteSets);
+          replaceStudySets(remoteSets, { markClean: true, skipAutosave: true });
           msg.textContent = 'Study sets synced from Google Drive.';
         } else {
           msg.textContent = 'No saved study sets found on Google Drive yet.';
@@ -1384,15 +1436,16 @@
       studySets = [studySets.pop(), ...studySets]; // move new set to top
       renderStudySets();
       renderSetSelect();
-      unsavedChanges = true;
+      markStudySetsChanged();
       // Scroll to bottom to reveal new set
       document.getElementById('manage-page').scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
     document.getElementById('btn-import').addEventListener('click', openImportModal);
     document.getElementById('btn-import-cancel').addEventListener('click', closeImportModal);
     document.getElementById('btn-import-confirm').addEventListener('click', handleImport);
-    document.getElementById('btn-save-local').addEventListener('click', () => { saveStudySets(); alert('Saved locally.'); unsavedChanges = false; });
+    document.getElementById('btn-save-local').addEventListener('click', () => { saveStudySets(); alert('Saved locally.'); });
     document.getElementById('btn-drive-connect').addEventListener('click', connectDrive);
+    document.getElementById('btn-drive-signout').addEventListener('click', signOutDrive);
     document.getElementById('btn-drive-save').addEventListener('click', saveToDrive);
 
     document.getElementById('set-select').addEventListener('change', (e) => setLastStudySetName(e.target.value));
@@ -1410,7 +1463,6 @@
     document.getElementById('btn-pause').addEventListener('click', togglePause);
     document.getElementById('btn-end').addEventListener('click', endRun);
     document.getElementById('btn-confirm').addEventListener('click', applyRound);
-    document.getElementById('btn-next').addEventListener('click', handleNextRound);
     document.getElementById('btn-back').addEventListener('click', backToMenu);
     document.getElementById('btn-play-again').addEventListener('click', () => {
       const lastMode = currentRun ? currentRun.mode : currentMode;
@@ -1453,7 +1505,6 @@
     setTargetCount(0);
     updateTimerDisplay();
     updateLivesVisibility();
-    showNextButton(false);
     toggleSetupContainer(false);
     updateStatus();
   </script>
