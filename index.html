@@ -122,6 +122,21 @@
       height: 100%;
       transition: width 0.1s linear;
     }
+    .option-grid { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); margin-top: 12px; }
+    .option-btn {
+      border: 1px solid var(--border);
+      background: #fff;
+      padding: 12px;
+      text-align: left;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: border 0.15s, box-shadow 0.15s, background 0.15s;
+    }
+    .option-btn.selected { border: 2px solid var(--primary); box-shadow: 0 0 0 2px rgba(90,103,216,0.2); }
+    .review-option { border: 2px solid transparent; border-radius: 10px; padding: 10px; }
+    .review-option.correct { background: #e6ffed; border-color: #48bb78; }
+    .review-option.distractor { background: #fff5f5; border-color: #fed7d7; }
+    .review-option.chosen { border-width: 3px; border-color: #2b6cb0; }
     .state-block { text-align: center; }
     .selection-group { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
     .selection-group button { min-width: 80px; }
@@ -227,6 +242,7 @@
             <div class="flex flex-wrap mode-toggle">
               <button id="mode-survival" class="tab-btn">Survival</button>
               <button id="mode-endless" class="tab-btn">Endless Streak</button>
+              <button id="mode-spot" class="tab-btn">Spot-the-Right 3</button>
             </div>
           </div>
           <div class="panel">
@@ -313,30 +329,36 @@
           <div class="progress"><div class="progress-inner" id="progress-inner"></div></div>
           <div class="selection-group" style="margin-top:12px;">
             <button class="btn-primary" id="btn-pause">Pause</button>
+            <button class="btn-accent hidden" id="btn-submit-picks" disabled>Review picks</button>
           </div>
+          <div id="spot-options" class="option-grid hidden"></div>
         </div>
 
         <div id="state-eval" class="hidden">
           <h3 id="eval-prompt"></h3>
-          <div class="panel" style="text-align:left;">
+          <div id="eval-self" class="panel" style="text-align:left;">
             <div id="eval-answers"></div>
             <p class="small" id="eval-answer-note"></p>
-          </div>
-          <h4>How did it go?</h4>
-          <div class="selection-group" id="performance-group">
-            <button data-perf="nailed" class="btn-primary">Nailed it (3 answers)</button>
-            <button data-perf="almost" class="btn-ghost">Almost (2 answers)</button>
-            <button data-perf="freeze" class="btn-danger">Brain freeze (0 answers)</button>
-          </div>
-          <h4>Target vocabulary used?</h4>
-          <div class="target-control">
-            <div class="target-count-display" id="target-count-display">0</div>
-            <div class="target-count-controls">
-              <button class="btn-ghost" id="target-decrease">-</button>
-              <input type="range" min="0" max="7" value="0" id="target-slider">
-              <button class="btn-ghost" id="target-increase">+</button>
+            <h4>How did it go?</h4>
+            <div class="selection-group" id="performance-group">
+              <button data-perf="nailed" class="btn-primary">Nailed it (3 answers)</button>
+              <button data-perf="almost" class="btn-ghost">Almost (2 answers)</button>
+              <button data-perf="freeze" class="btn-danger">Brain freeze (0 answers)</button>
             </div>
-            <div class="small" id="target-count-label">Target vocabulary: 0</div>
+            <h4>Target vocabulary used?</h4>
+            <div class="target-control">
+              <div class="target-count-display" id="target-count-display">0</div>
+              <div class="target-count-controls">
+                <button class="btn-ghost" id="target-decrease">-</button>
+                <input type="range" min="0" max="7" value="0" id="target-slider">
+                <button class="btn-ghost" id="target-increase">+</button>
+              </div>
+              <div class="small" id="target-count-label">Target vocabulary: 0</div>
+            </div>
+          </div>
+          <div id="eval-review" class="panel hidden" style="text-align:left;">
+            <div class="small" id="review-time"></div>
+            <div id="review-options" class="grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;"></div>
           </div>
           <div id="score-breakdown" class="card" style="margin-top:12px; text-align:left;"></div>
           <div class="selection-group" style="margin-top:12px;">
@@ -355,7 +377,7 @@
     <div class="modal">
       <h3>Import Study Sets from JSON</h3>
       <p class="small">Paste an array of study sets with <code>name</code> and <code>items</code> (each item has <code>prompt</code>, <code>targetWords</code>, <code>answers</code>, and <code>distractors</code> arrays).</p>
-      <textarea id="import-text" placeholder='[{"name":"My Set","items":[{"prompt":"Name 3...","targetWords":["a","b"],"answers":["answer 1","answer 2"],"distractors":["d1","d2"]}]}]'></textarea>
+      <textarea id="import-text" placeholder='[{"name":"My Set","items":[{"prompt":"Pick 3...","targetWords":["a","b"],"answers":["answer 1","answer 2"],"distractors":["d1","d2"]}]}]'></textarea>
       <div class="small" id="import-error" style="color:var(--danger); min-height: 18px;"></div>
       <div class="flex between">
         <button class="btn-primary" id="btn-import-confirm">Import</button>
@@ -453,7 +475,7 @@
     }
 
     async function uploadStudySetsToDrive(token) {
-      const fileContent = JSON.stringify({ studySets }, null, 2);
+      const fileContent = JSON.stringify({ studySets, practiceLog }, null, 2);
       const file = new Blob([fileContent], { type: 'application/json' });
       const metadata = { name: 'five_second_study_sets.json', mimeType: 'application/json' };
       const form = new FormData();
@@ -505,12 +527,14 @@
     }
 
     let studySets = [];
-    let currentMode = null; // 'survival' | 'endless'
+    let practiceLog = [];
+    let currentMode = null; // 'survival' | 'endless' | 'spot'
     let currentRun = null;   // Tracks the current session data
     let timerInterval = null;
     let timerStart = null;
     let timerEnd = null;
     let timerRemaining = 5000;
+    let timerElapsed = 0;
     let timerPaused = false;
     let timerLengthSeconds = 5;
     let startingLives = 3;
@@ -520,6 +544,10 @@
     const MAX_LIVES = 10;
     const POINT_CHANGE_STEP_MS = 300;
     const DIFFICULTY_TIMERS = { easy: 8, medium: 5, hard: 4 };
+    const SPOT_TIME_LIMITS = { easy: 40, medium: 30, hard: 20 };
+    let spotOptions = [];
+    let spotSelections = new Set();
+    let spotRoundResults = null;
     const POINTS_PER_LIFE = 5;
     let setupCollapsed = false;
     let lifeChangePending = 0;
@@ -539,9 +567,13 @@
       });
     }
 
-    function parseStudySetsPayload(payload) {
-      if (Array.isArray(payload)) return payload;
-      if (payload && Array.isArray(payload.studySets)) return payload.studySets;
+    function parsePersistedData(payload) {
+      if (Array.isArray(payload)) {
+        return { studySets: payload, practiceLog: [] };
+      }
+      if (payload && Array.isArray(payload.studySets)) {
+        return { studySets: payload.studySets, practiceLog: Array.isArray(payload.practiceLog) ? payload.practiceLog : [] };
+      }
       return null;
     }
 
@@ -551,9 +583,10 @@
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
-          const sets = parseStudySetsPayload(parsed) || parsed;
-          if (Array.isArray(sets)) {
-            studySets = sets;
+          const parsedData = parsePersistedData(parsed);
+          if (parsedData && Array.isArray(parsedData.studySets)) {
+            studySets = parsedData.studySets;
+            practiceLog = parsedData.practiceLog || [];
             normalizeSetMeta();
             return;
           }
@@ -562,11 +595,12 @@
         }
       }
       studySets = [];
+      practiceLog = [];
       normalizeSetMeta();
     }
 
     function saveStudySets({ markClean = true } = {}) {
-      localStorage.setItem(STORAGE_KEYS.sets, JSON.stringify(studySets));
+      localStorage.setItem(STORAGE_KEYS.sets, JSON.stringify({ studySets, practiceLog }));
       if (markClean) unsavedChanges = false;
     }
 
@@ -694,7 +728,7 @@
       row.className = 'item-row';
       row.innerHTML = `
         <label>Prompt</label>
-        <input type="text" value="${item.prompt}" placeholder="Name 3..." ${readOnly ? 'disabled' : ''} />
+        <input type="text" value="${item.prompt}" placeholder="Pick 3..." ${readOnly ? 'disabled' : ''} />
         <label>Target words (comma separated)</label>
         <input type="text" value="${item.targetWords.join(', ')}" placeholder="tropical, juicy, citrus" ${readOnly ? 'disabled' : ''} />
         <label>Sample answers (comma separated)</label>
@@ -781,7 +815,7 @@
       const statusCard = document.getElementById('status-card');
       statusCard.classList.toggle('hidden', !currentRun);
       if (!currentRun) return;
-      const modeLabel = currentMode === 'survival' ? 'Survival' : currentMode === 'endless' ? 'Endless Streak' : 'Mode not selected';
+      const modeLabel = currentMode === 'survival' ? 'Survival' : currentMode === 'endless' ? 'Endless Streak' : currentMode === 'spot' ? 'Spot-the-Right 3' : 'Mode not selected';
       document.getElementById('status-mode').textContent = modeLabel;
       document.getElementById('status-difficulty').textContent = `Difficulty: ${currentRun.difficulty}`;
       document.getElementById('status-score').textContent = Math.round(currentRun.score * 10) / 10;
@@ -791,7 +825,7 @@
       lifeChangeEl.classList.toggle('negative', lifeChangePending < 0);
       scoreChangeEl.textContent = scoreChangePending ? `${scoreChangePending > 0 ? '+' : ''}${scoreChangePending}` : '';
       scoreChangeEl.classList.toggle('negative', scoreChangePending < 0);
-      if (currentRun.mode === 'survival') {
+      if (currentRun.mode === 'survival' || currentRun.mode === 'spot') {
         document.getElementById('lives-display').textContent = renderHearts(currentRun.lives);
       } else {
         document.getElementById('lives-display').textContent = '∞';
@@ -850,19 +884,39 @@
       const roundsList = document.getElementById('summary-rounds');
       const meta = document.getElementById('summary-meta');
       const totals = document.getElementById('summary-totals');
-      meta.textContent = `Mode: ${data.mode === 'survival' ? 'Survival' : 'Endless Streak'} · Difficulty: ${data.difficulty} · Rounds: ${data.rounds}`;
-      if (!data.roundLog.length) {
-        roundsList.innerHTML = '<li class="report-item">No rounds recorded.</li>';
+      if (data.mode === 'spot') {
+        meta.textContent = `Mode: Spot-the-Right 3 · Difficulty: ${data.difficulty} · Rounds: ${data.rounds} · Set: ${data.setName || 'N/A'}`;
+        if (!data.roundLog.length) {
+          roundsList.innerHTML = '<li class="report-item">No rounds recorded.</li>';
+        } else {
+          const sortedRounds = [...data.roundLog].sort((a, b) => (b.timeMs || 0) - (a.timeMs || 0));
+          roundsList.innerHTML = sortedRounds.map((r, idx) => {
+            const optionsText = (r.options || []).map(opt => `${opt.chosen ? '🔹 ' : ''}${opt.text} (${opt.isCorrect ? 'correct' : 'distractor'})`).join('<br>');
+            return `
+              <li class="report-item">
+                <strong>Prompt ${idx + 1}:</strong> ${r.prompt}<br>
+                Time used: ${(r.timeMs / 1000).toFixed(1)}s · Points: ${r.points} · Life change: ${r.lifeDelta || 0}<br>
+                Selections:<br>${optionsText}
+              </li>
+            `;
+          }).join('');
+        }
+        totals.innerHTML = `Base points: <strong>${data.baseScore?.toFixed ? data.baseScore.toFixed(1) : data.baseScore}</strong> · Lives left: ${data.lifeLeft} (bonus ${Math.round((data.lifeBonus || 0) * 10) / 10})<br>Total points earned: <strong>${data.score}</strong><br>Practice date: ${new Date(data.practiceDate || Date.now()).toLocaleString()}`;
       } else {
-        roundsList.innerHTML = data.roundLog.map((r, idx) => `
-          <li class="report-item">
-            <strong>Prompt ${idx + 1}:</strong> ${r.prompt}<br>
-            Answers: ${r.answers} · Target words used: ${r.targetsUsed} · Points: ${r.points}
-          </li>
-        `).join('');
+        meta.textContent = `Mode: ${data.mode === 'survival' ? 'Survival' : 'Endless Streak'} · Difficulty: ${data.difficulty} · Rounds: ${data.rounds}`;
+        if (!data.roundLog.length) {
+          roundsList.innerHTML = '<li class="report-item">No rounds recorded.</li>';
+        } else {
+          roundsList.innerHTML = data.roundLog.map((r, idx) => `
+            <li class="report-item">
+              <strong>Prompt ${idx + 1}:</strong> ${r.prompt}<br>
+              Answers: ${r.answers} · Target words used: ${r.targetsUsed} · Points: ${r.points}
+            </li>
+          `).join('');
+        }
+        const lifeBonus = Math.max(0, data.lifeLeft) * POINTS_PER_LIFE;
+        totals.innerHTML = `Base points: <strong>${data.score}</strong> · Lives left: ${data.lifeLeft}${data.mode === 'survival' ? ` (bonus ${lifeBonus})` : ''}<br>Total points with bonus: <strong>${Math.round((data.score + lifeBonus) * 10) / 10}</strong>`;
       }
-      const lifeBonus = Math.max(0, data.lifeLeft) * POINTS_PER_LIFE;
-      totals.innerHTML = `Base points: <strong>${data.score}</strong> · Lives left: ${data.lifeLeft}${data.mode === 'survival' ? ` (bonus ${lifeBonus})` : ''}<br>Total points with bonus: <strong>${Math.round((data.score + lifeBonus) * 10) / 10}</strong>`;
       modal.classList.remove('hidden');
     }
 
@@ -870,7 +924,7 @@
     // Import / Export helpers
     // ---------------------------
     function downloadSets() {
-      const blob = new Blob([JSON.stringify(studySets, null, 2)], { type: 'application/json' });
+      const blob = new Blob([JSON.stringify({ studySets, practiceLog }, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -914,11 +968,13 @@
       const error = document.getElementById('import-error');
       try {
         const parsed = JSON.parse(text);
-        const candidate = parseStudySetsPayload(parsed) || parsed;
+        const parsedData = parsePersistedData(parsed);
+        const candidate = parsedData ? parsedData.studySets : parsed;
         if (!validateImportedSets(candidate)) {
           error.textContent = 'Invalid format. Ensure it is an array of sets with name, items, targetWords, answers, and distractors arrays.';
           return;
         }
+        if (parsedData && Array.isArray(parsedData.practiceLog)) practiceLog = parsedData.practiceLog;
         appendStudySets(candidate);
         closeImportModal();
       } catch (e) {
@@ -944,6 +1000,7 @@
       currentMode = mode;
       document.getElementById('mode-survival').classList.toggle('active', mode === 'survival');
       document.getElementById('mode-endless').classList.toggle('active', mode === 'endless');
+      document.getElementById('mode-spot').classList.toggle('active', mode === 'spot');
       updateLivesVisibility();
       updateStatus();
     }
@@ -972,7 +1029,7 @@
     }
 
     function updateLivesVisibility() {
-      document.getElementById('lives-row').style.display = currentMode === 'survival' ? 'flex' : 'none';
+      document.getElementById('lives-row').style.display = (currentMode === 'survival' || currentMode === 'spot') ? 'flex' : 'none';
     }
 
     // Track unsaved changes
@@ -993,6 +1050,19 @@
 
     function difficultyMultiplier(diff) {
       return diff === 'easy' ? 1 : diff === 'hard' ? 3 : 2;
+    }
+
+    function getSpotTimeLimit(diff) {
+      return SPOT_TIME_LIMITS[diff] || 30;
+    }
+
+    function shuffleArray(arr) {
+      const copy = [...arr];
+      for (let i = copy.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [copy[i], copy[j]] = [copy[j], copy[i]];
+      }
+      return copy;
     }
 
     function performanceToCorrect(perf) {
@@ -1035,12 +1105,14 @@
         setName,
         setItems: set.items,
         difficulty,
-        lives: currentMode === 'survival' ? startingLives : null,
+        lives: (currentMode === 'survival' || currentMode === 'spot') ? startingLives : null,
         score: 0,
         streak: 0,
         rounds: 0,
         lastIndex: -1,
         timerDuration: timerDurationMs,
+        pendingIndices: currentMode === 'spot' ? shuffleArray(set.items.map((_, i) => i)) : null,
+        baseTimeLimitMs: currentMode === 'spot' ? getSpotTimeLimit(difficulty) * 1000 : timerDurationMs,
         roundLog: []
       };
       lifeChangePending = 0;
@@ -1057,12 +1129,20 @@
       if (!currentRun) return;
       const { setItems, lastIndex } = currentRun;
       if (!setItems.length) return;
-      let idx = Math.floor(Math.random() * setItems.length);
-      if (setItems.length > 1 && idx === lastIndex) {
-        idx = (idx + 1) % setItems.length;
+      if (currentRun.mode === 'spot') {
+        if (!currentRun.pendingIndices?.length) {
+          endRun();
+          return;
+        }
+        currentRun.lastIndex = currentRun.pendingIndices.shift();
+      } else {
+        let idx = Math.floor(Math.random() * setItems.length);
+        if (setItems.length > 1 && idx === lastIndex) {
+          idx = (idx + 1) % setItems.length;
+        }
+        currentRun.lastIndex = idx;
       }
-      currentRun.lastIndex = idx;
-      const item = setItems[idx];
+      const item = setItems[currentRun.lastIndex];
       document.getElementById('prompt-text').textContent = item.prompt || 'Unnamed prompt';
       document.getElementById('eval-prompt').textContent = item.prompt || 'Unnamed prompt';
       const answerList = Array.isArray(item.answers) ? item.answers : [];
@@ -1077,17 +1157,123 @@
       currentRun.currentItem = item;
       const duration = currentRun.timerDuration || (timerLengthSeconds * 1000);
       timerRemaining = duration;
+      timerElapsed = 0;
       timerPaused = false;
       document.getElementById('btn-pause').textContent = 'Pause';
-      document.getElementById('timer').textContent = Math.ceil(timerRemaining / 1000);
-      document.getElementById('progress-inner').style.width = '100%';
+      document.getElementById('timer').textContent = currentRun.mode === 'spot' ? '0.0' : Math.ceil(timerRemaining / 1000);
+      document.getElementById('progress-inner').style.width = currentRun.mode === 'spot' ? '0%' : '100%';
       document.getElementById('preview-text').textContent = item.prompt || 'Unnamed prompt';
+      if (currentRun.mode === 'spot') {
+        setupSpotOptions(item);
+      }
       switchState('preview');
+    }
+
+    function setupSpotOptions(item) {
+      const answerPool = Array.isArray(item.answers) && item.answers.length ? item.answers : (Array.isArray(item.targetWords) ? item.targetWords : []);
+      const distractorPool = Array.isArray(item.distractors) ? item.distractors : [];
+      const correct = shuffleArray(answerPool).slice(0, 3);
+      while (correct.length < 3) correct.push(`Correct option ${correct.length + 1}`);
+      let distractors = shuffleArray(distractorPool).slice(0, 2);
+      while (distractors.length < 2) distractors.push(`Distractor ${distractors.length + 1}`);
+      const options = shuffleArray([
+        ...correct.map(text => ({ text, isCorrect: true })),
+        ...distractors.map(text => ({ text, isCorrect: false }))
+      ]);
+      spotOptions = options;
+      spotSelections = new Set();
+      spotRoundResults = null;
+      const optionContainer = document.getElementById('spot-options');
+      optionContainer.classList.add('hidden');
+      optionContainer.innerHTML = '';
+      document.getElementById('btn-submit-picks').classList.add('hidden');
+    }
+
+    function renderSpotOptions() {
+      const optionContainer = document.getElementById('spot-options');
+      optionContainer.innerHTML = '';
+      spotOptions.forEach((opt, idx) => {
+        const btn = document.createElement('button');
+        btn.className = 'option-btn';
+        btn.textContent = opt.text;
+        btn.addEventListener('click', () => toggleSpotSelection(idx, btn));
+        optionContainer.appendChild(btn);
+      });
+      optionContainer.classList.remove('hidden');
+      const submit = document.getElementById('btn-submit-picks');
+      submit.classList.remove('hidden');
+      submit.disabled = true;
+    }
+
+    function toggleSpotSelection(idx, btn) {
+      if (spotSelections.has(idx)) {
+        spotSelections.delete(idx);
+      } else {
+        if (spotSelections.size >= 3) return;
+        spotSelections.add(idx);
+      }
+      document.querySelectorAll('#spot-options .option-btn').forEach((button, i) => {
+        button.classList.toggle('selected', spotSelections.has(i));
+      });
+      document.getElementById('btn-submit-picks').disabled = spotSelections.size !== 3;
+    }
+
+    function showSpotReview() {
+      if (!currentRun || spotSelections.size !== 3) return;
+      stopTimer();
+      switchState('eval');
+      document.getElementById('eval-self').classList.add('hidden');
+      document.getElementById('eval-review').classList.remove('hidden');
+      const reviewOptions = document.getElementById('review-options');
+      reviewOptions.innerHTML = '';
+      const timeMs = timerElapsed;
+      const limitSeconds = getSpotTimeLimit(currentRun.difficulty);
+      const chosen = Array.from(spotSelections);
+      const correctSelections = chosen.filter(idx => spotOptions[idx]?.isCorrect);
+      const distractorSelections = chosen.filter(idx => !spotOptions[idx]?.isCorrect);
+      const basePoints = difficultyMultiplier(currentRun.difficulty) * correctSelections.length;
+      const factor = Math.max(0, 2 - (timeMs / 1000) / limitSeconds);
+      const points = Math.round(Math.max(0, basePoints * factor) * 10) / 10;
+      const lifeDelta = distractorSelections.length === 0 ? 0 : distractorSelections.length === 2 ? -1 : -0.5;
+      spotRoundResults = {
+        prompt: currentRun.currentItem?.prompt || 'Unnamed prompt',
+        options: spotOptions.map((opt, idx) => ({ text: opt.text, isCorrect: opt.isCorrect, chosen: spotSelections.has(idx) })),
+        timeMs,
+        points,
+        lifeDelta,
+        correct: correctSelections.length,
+        distractorsChosen: distractorSelections.length,
+        timeLimitSeconds: limitSeconds
+      };
+      document.getElementById('review-time').textContent = `Time used: ${(timeMs / 1000).toFixed(1)}s · Base limit ${limitSeconds}s`;
+      spotRoundResults.options.forEach((opt) => {
+        const div = document.createElement('div');
+        div.className = 'review-option ' + (opt.isCorrect ? 'correct' : 'distractor');
+        if (opt.chosen) div.classList.add('chosen');
+        div.textContent = opt.text;
+        reviewOptions.appendChild(div);
+      });
+      document.getElementById('score-breakdown').innerHTML = `
+        <div><strong>Correct picks:</strong> ${correctSelections.length} / 3</div>
+        <div><strong>Distractors chosen:</strong> ${distractorSelections.length}</div>
+        <div><strong>Base points:</strong> ${basePoints}</div>
+        <div><strong>Time factor:</strong> ${factor.toFixed(2)}x</div>
+        <div><strong>Points this round:</strong> ${points}</div>
+        <div><strong>Life change:</strong> ${lifeDelta}</div>
+      `;
+      const confirmBtn = document.getElementById('btn-confirm');
+      confirmBtn.disabled = false;
+      confirmBtn.dataset.finalPoints = points;
+      confirmBtn.dataset.lifeDelta = lifeDelta;
+      updateStatus();
     }
 
     function startPromptTimer() {
       if (!currentRun || document.getElementById('state-preview').classList.contains('hidden')) return;
       switchState('prompt');
+      if (currentRun.mode === 'spot') {
+        renderSpotOptions();
+      }
       startTimer();
     }
 
@@ -1100,11 +1286,18 @@
 
     function startTimer() {
       if (timerInterval) clearInterval(timerInterval);
-      timerStart = performance.now();
-      timerEnd = timerStart + timerRemaining;
-      timerPaused = false;
-      timerInterval = setInterval(updateTimer, 100);
-      updateTimer();
+      if (currentRun?.mode === 'spot') {
+        timerStart = performance.now() - timerElapsed;
+        timerPaused = false;
+        timerInterval = setInterval(updateTimer, 100);
+        updateTimer();
+      } else {
+        timerStart = performance.now();
+        timerEnd = timerStart + timerRemaining;
+        timerPaused = false;
+        timerInterval = setInterval(updateTimer, 100);
+        updateTimer();
+      }
     }
 
     function stopTimer() {
@@ -1114,6 +1307,14 @@
 
     function updateTimer() {
       const now = performance.now();
+      if (currentRun?.mode === 'spot') {
+        timerElapsed = Math.max(0, now - (timerStart || now));
+        const seconds = (timerElapsed / 1000).toFixed(1);
+        document.getElementById('timer').textContent = seconds;
+        const pct = Math.min(100, (timerElapsed / (currentRun.baseTimeLimitMs || 1)) * 100);
+        document.getElementById('progress-inner').style.width = pct + '%';
+        return;
+      }
       const remaining = Math.max(0, (timerEnd || now) - now);
       timerRemaining = remaining;
       const seconds = Math.ceil(remaining / 1000);
@@ -1135,17 +1336,31 @@
         document.getElementById('btn-pause').textContent = 'Pause';
       } else {
         timerPaused = true;
-        timerRemaining = Math.max(0, (timerEnd || performance.now()) - performance.now());
+        if (currentRun.mode === 'spot') {
+          timerElapsed = Math.max(0, performance.now() - (timerStart || performance.now()));
+        } else {
+          timerRemaining = Math.max(0, (timerEnd || performance.now()) - performance.now());
+        }
         stopTimer();
         document.getElementById('btn-pause').textContent = 'Resume';
-        document.getElementById('timer').textContent = Math.ceil(timerRemaining / 1000);
-        const total = currentRun?.timerDuration || (timerLengthSeconds * 1000);
-        document.getElementById('progress-inner').style.width = (timerRemaining / total) * 100 + '%';
+        if (currentRun.mode === 'spot') {
+          document.getElementById('timer').textContent = (timerElapsed / 1000).toFixed(1);
+          const pct = Math.min(100, (timerElapsed / (currentRun.baseTimeLimitMs || 1)) * 100);
+          document.getElementById('progress-inner').style.width = pct + '%';
+        } else {
+          document.getElementById('timer').textContent = Math.ceil(timerRemaining / 1000);
+          const total = currentRun?.timerDuration || (timerLengthSeconds * 1000);
+          document.getElementById('progress-inner').style.width = (timerRemaining / total) * 100 + '%';
+        }
       }
     }
 
     function openEvaluation() {
       stopTimer();
+      if (currentRun?.mode === 'spot') {
+        showSpotReview();
+        return;
+      }
       switchState('eval');
       updateStatus();
     }
@@ -1157,6 +1372,11 @@
       setTargetCount(0);
       document.getElementById('score-breakdown').innerHTML = '';
       document.getElementById('btn-confirm').disabled = true;
+      document.getElementById('eval-self').classList.remove('hidden');
+      document.getElementById('eval-review').classList.add('hidden');
+      document.getElementById('review-options').innerHTML = '';
+      document.getElementById('review-time').textContent = '';
+      spotRoundResults = null;
     }
 
     let selectedPerformance = null;
@@ -1195,6 +1415,33 @@
     }
 
     function applyRound() {
+      if (currentRun.mode === 'spot') {
+        if (!spotRoundResults || !spotRoundResults.options) return;
+        document.getElementById('btn-confirm').disabled = true;
+        currentRun.rounds += 1;
+        currentRun.roundLog.push({
+          prompt: spotRoundResults.prompt,
+          options: spotRoundResults.options,
+          timeMs: spotRoundResults.timeMs,
+          points: spotRoundResults.points,
+          lifeDelta: spotRoundResults.lifeDelta,
+          correct: spotRoundResults.correct,
+          distractorsChosen: spotRoundResults.distractorsChosen
+        });
+        const projectedLives = currentRun.lives + spotRoundResults.lifeDelta;
+        const willContinue = projectedLives > 0 && currentRun.pendingIndices && currentRun.pendingIndices.length > 0;
+        const proceedAfterAnimation = () => {
+          if (!currentRun) return;
+          if (willContinue) {
+            document.getElementById('state-eval').classList.add('hidden');
+            goToPrompt();
+          } else {
+            endRun();
+          }
+        };
+        animatePointChanges(spotRoundResults.lifeDelta, spotRoundResults.points, proceedAfterAnimation);
+        return;
+      }
       if (selectedPerformance === null || selectedTargetCount === null) return;
       const finalPoints = Number(document.getElementById('btn-confirm').dataset.finalPoints || 0);
       document.getElementById('btn-confirm').disabled = true;
@@ -1241,25 +1488,60 @@
       }
       if (!currentRun) return;
       const best = loadBestScores();
-      if (currentRun.mode === 'survival') {
+      let summaryData;
+      if (currentRun.mode === 'spot') {
+        const baseScore = Math.round(currentRun.score * 10) / 10;
+        const lifeLeft = Math.max(0, Math.round(currentRun.lives * 2) / 2);
+        const lifeBonus = Math.max(0, currentRun.lives) * difficultyMultiplier(currentRun.difficulty) * 5;
+        const totalScore = Math.round((currentRun.score + lifeBonus) * 10) / 10;
+        summaryData = {
+          mode: currentRun.mode,
+          difficulty: currentRun.difficulty,
+          rounds: currentRun.rounds,
+          score: totalScore,
+          baseScore,
+          lifeBonus,
+          lifeLeft,
+          roundLog: currentRun.roundLog || [],
+          setName: currentRun.setName,
+          practiceDate: new Date().toISOString()
+        };
+        practiceLog.push({
+          ...summaryData,
+          totalScore,
+          baseScore,
+          lifeBonus
+        });
+        unsavedChanges = true;
+        saveStudySets({ markClean: false });
+        scheduleDriveAutosave();
+      } else if (currentRun.mode === 'survival') {
         if (currentRun.score > best.survival) {
           best.survival = currentRun.score;
         }
         updateBestScores({ survival: best.survival });
+        const lifeLeft = Math.max(0, Math.round(currentRun.lives * 2) / 2);
+        summaryData = {
+          mode: currentRun.mode,
+          difficulty: currentRun.difficulty,
+          rounds: currentRun.rounds,
+          score: Math.round(currentRun.score * 10) / 10,
+          lifeLeft,
+          roundLog: currentRun.roundLog || []
+        };
       } else {
         if (currentRun.score > best.endlessScore) best.endlessScore = currentRun.score;
         if (currentRun.streak > best.endlessStreak) best.endlessStreak = currentRun.streak;
         updateBestScores({ endlessScore: best.endlessScore, endlessStreak: best.endlessStreak });
+        summaryData = {
+          mode: currentRun.mode,
+          difficulty: currentRun.difficulty,
+          rounds: currentRun.rounds,
+          score: Math.round(currentRun.score * 10) / 10,
+          lifeLeft: 0,
+          roundLog: currentRun.roundLog || []
+        };
       }
-      const lifeLeft = currentRun.mode === 'survival' ? Math.max(0, Math.round(currentRun.lives * 2) / 2) : 0;
-      const summaryData = {
-        mode: currentRun.mode,
-        difficulty: currentRun.difficulty,
-        rounds: currentRun.rounds,
-        score: Math.round(currentRun.score * 10) / 10,
-        lifeLeft,
-        roundLog: currentRun.roundLog || []
-      };
       lifeChangePending = 0;
       scoreChangePending = 0;
       updateStatus();
@@ -1377,9 +1659,10 @@
       if (!fileResp.ok) throw new Error('Unable to download study sets from Drive.');
       const content = await fileResp.text();
       const parsed = JSON.parse(content);
-      const sets = parseStudySetsPayload(parsed) || parsed.studySets || parsed;
-      if (!validateImportedSets(sets)) throw new Error('Drive file is not in the expected format.');
-      return sets;
+      const parsedData = parsePersistedData(parsed) || { studySets: parsed.studySets || parsed, practiceLog: [] };
+      if (!validateImportedSets(parsedData.studySets)) throw new Error('Drive file is not in the expected format.');
+      practiceLog = Array.isArray(parsedData.practiceLog) ? parsedData.practiceLog : [];
+      return parsedData.studySets;
     }
 
     async function syncStudySetsFromDrive() {
@@ -1458,9 +1741,11 @@
 
     document.getElementById('mode-survival').addEventListener('click', () => setMode('survival'));
     document.getElementById('mode-endless').addEventListener('click', () => setMode('endless'));
+    document.getElementById('mode-spot').addEventListener('click', () => setMode('spot'));
     document.getElementById('btn-start').addEventListener('click', startGame);
     document.getElementById('btn-start-timer').addEventListener('click', startPromptTimer);
     document.getElementById('btn-pause').addEventListener('click', togglePause);
+    document.getElementById('btn-submit-picks').addEventListener('click', showSpotReview);
     document.getElementById('btn-end').addEventListener('click', endRun);
     document.getElementById('btn-confirm').addEventListener('click', applyRound);
     document.getElementById('btn-back').addEventListener('click', backToMenu);
