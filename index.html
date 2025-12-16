@@ -174,10 +174,15 @@
     .report-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
     .report-item { border: 1px solid var(--border); border-radius: 10px; padding: 10px; background: #f9fafb; }
     .scrollable-content { max-height: 60vh; overflow-y: auto; }
+    .report-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+    .report-tab { padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; background: #f8fafc; cursor: pointer; font-weight: 600; }
+    .report-tab.active { background: var(--primary); color: #fff; border-color: var(--primary); }
     table.report-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
     table.report-table th, table.report-table td { border: 1px solid var(--border); padding: 8px; text-align: left; }
     table.report-table th { background: #f8fafc; }
     table.report-table tbody tr:nth-child(even) { background: #fff; }
+    .cell-incorrect { background: #fff5f5; }
+    .cell-chosen { background: #e2e8f0; color: #000; }
     @media (max-width: 720px) {
       header { position: sticky; top: 0; }
       .set-header { flex-direction: column; align-items: flex-start; }
@@ -415,17 +420,20 @@
         <button class="btn-ghost" id="btn-close-reports">Close</button>
       </div>
       <div class="small" id="reports-hint"></div>
+      <div id="reports-tabs" class="report-tabs"></div>
+      <div class="small" id="reports-meta"></div>
       <div class="scrollable-content">
         <table class="report-table">
           <thead>
             <tr>
-              <th>Date</th>
-              <th>Difficulty</th>
-              <th>Rounds</th>
-              <th>Base Points</th>
-              <th>Life Bonus</th>
-              <th>Lives Left</th>
-              <th>Total Points</th>
+              <th>Prompt</th>
+              <th>Time (s)</th>
+              <th>Correctness</th>
+              <th>Correct 1</th>
+              <th>Correct 2</th>
+              <th>Correct 3</th>
+              <th>Distractor 1</th>
+              <th>Distractor 2</th>
             </tr>
           </thead>
           <tbody id="reports-table-body"></tbody>
@@ -964,46 +972,81 @@
       const modal = document.getElementById('reports-modal');
       const title = document.getElementById('reports-title');
       const hint = document.getElementById('reports-hint');
+      const tabs = document.getElementById('reports-tabs');
+      const meta = document.getElementById('reports-meta');
       const tbody = document.getElementById('reports-table-body');
       const entries = practiceLog
         .filter(log => log.mode === 'spot' && (!setName || log.setName === setName))
         .sort((a, b) => new Date(b.practiceDate || 0) - new Date(a.practiceDate || 0));
       title.textContent = `Spot-the-Right 3 Reports${setName ? ' — ' + setName : ''}`;
-      hint.textContent = entries.length ? `Showing ${entries.length} Spot-the-Right 3 run${entries.length === 1 ? '' : 's'}.` : 'No Spot-the-Right 3 runs yet.';
+      hint.textContent = entries.length ? `Showing ${entries.length} Spot-the-Right 3 run${entries.length === 1 ? '' : 's'}. Switch tabs to view a specific practice date.` : 'No Spot-the-Right 3 runs yet.';
+      tabs.innerHTML = '';
+      meta.textContent = '';
       tbody.innerHTML = '';
-      const formatValue = (val) => {
-        if (val === undefined || val === null || val === '') return '—';
-        if (typeof val === 'number') return Math.round(val * 10) / 10;
-        return val;
-      };
+
       if (!entries.length) {
         const row = document.createElement('tr');
         const cell = document.createElement('td');
-        cell.colSpan = 7;
+        cell.colSpan = 8;
         cell.textContent = 'No Spot-the-Right 3 reports for this set yet.';
         row.appendChild(cell);
         tbody.appendChild(row);
-      } else {
-        entries.forEach(entry => {
+        modal.classList.remove('hidden');
+        return;
+      }
+
+      const renderEntry = (entry, idx) => {
+        Array.from(tabs.children).forEach((tab, i) => tab.classList.toggle('active', i === idx));
+        meta.textContent = `Date: ${new Date(entry.practiceDate || Date.now()).toLocaleString()} · Difficulty: ${entry.difficulty || '—'} · Rounds: ${entry.rounds ?? '—'} · Total points: ${entry.score ?? '—'} · Lives left: ${entry.lifeLeft ?? '—'}`;
+        tbody.innerHTML = '';
+        const rounds = Array.isArray(entry.roundLog) ? entry.roundLog : [];
+        if (!rounds.length) {
           const row = document.createElement('tr');
-          const dateText = new Date(entry.practiceDate || Date.now()).toLocaleString();
+          const cell = document.createElement('td');
+          cell.colSpan = 8;
+          cell.textContent = 'No rounds recorded for this session.';
+          row.appendChild(cell);
+          tbody.appendChild(row);
+          return;
+        }
+        rounds.forEach(round => {
+          const row = document.createElement('tr');
+          const correctOptions = (round.options || []).filter(opt => opt.isCorrect).slice(0, 3);
+          while (correctOptions.length < 3) correctOptions.push(null);
+          const distractorOptions = (round.options || []).filter(opt => !opt.isCorrect).slice(0, 2);
+          while (distractorOptions.length < 2) distractorOptions.push(null);
+          const timeSeconds = round.timeMs ? (round.timeMs / 1000).toFixed(1) : '—';
+          const correctCount = typeof round.correct === 'number'
+            ? round.correct
+            : (round.options || []).filter(opt => opt.isCorrect && opt.chosen).length;
+          const correctnessValue = `${correctCount}/3`;
           const cells = [
-            dateText,
-            entry.difficulty || '—',
-            entry.rounds ?? '—',
-            formatValue(entry.baseScore),
-            formatValue(entry.lifeBonus),
-            formatValue(entry.lifeLeft),
-            formatValue(entry.score)
+            { text: round.prompt || 'Unnamed prompt' },
+            { text: timeSeconds },
+            { text: correctnessValue, className: correctCount === 3 ? '' : 'cell-incorrect' },
+            ...correctOptions.map(opt => ({ text: opt?.text || '—', chosen: !!opt?.chosen })),
+            ...distractorOptions.map(opt => ({ text: opt?.text || '—', chosen: !!opt?.chosen }))
           ];
-          cells.forEach(value => {
+          cells.forEach(cellData => {
             const td = document.createElement('td');
-            td.textContent = value;
+            td.textContent = cellData.text;
+            if (cellData.className) td.classList.add(cellData.className);
+            if (cellData.chosen) td.classList.add('cell-chosen');
             row.appendChild(td);
           });
           tbody.appendChild(row);
         });
-      }
+      };
+
+      entries.forEach((entry, idx) => {
+        const tab = document.createElement('button');
+        tab.className = 'report-tab' + (idx === 0 ? ' active' : '');
+        tab.textContent = new Date(entry.practiceDate || Date.now()).toLocaleString();
+        tab.addEventListener('click', () => renderEntry(entry, idx));
+        tabs.appendChild(tab);
+      });
+
+      renderEntry(entries[0], 0);
       modal.classList.remove('hidden');
     }
 
