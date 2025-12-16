@@ -170,13 +170,15 @@
       z-index: 10;
     }
     .modal-backdrop.hidden { display: none !important; pointer-events: none; }
-    .modal { background: #fff; border-radius: 12px; padding: 16px; width: min(640px, 90vw); max-height: 90vh; overflow-y: auto; box-shadow: 0 8px 24px rgba(0,0,0,0.2); }
+    .modal { background: #fff; border-radius: 12px; padding: 16px; width: min(1400px, 90vw); max-height: 90vh; overflow-y: auto; box-shadow: 0 8px 24px rgba(0,0,0,0.2); }
     .report-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
     .report-item { border: 1px solid var(--border); border-radius: 10px; padding: 10px; background: #f9fafb; }
-    .scrollable-content { max-height: 60vh; overflow-y: auto; }
+    .scrollable-content { max-height: 60vh; overflow: auto; }
     .report-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
-    .report-tab { padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; background: #f8fafc; cursor: pointer; font-weight: 600; }
+    .report-tab { padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; background: #f8fafc; cursor: pointer; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; }
     .report-tab.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .report-tab .tab-close { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; font-size: 12px; background: rgba(0,0,0,0.08); color: inherit; border: 1px solid transparent; cursor: pointer; }
+    .report-tab.active .tab-close { background: rgba(255,255,255,0.2); }
     table.report-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
     table.report-table th, table.report-table td { border: 1px solid var(--border); padding: 8px; text-align: left; }
     table.report-table th { background: #f8fafc; }
@@ -1038,10 +1040,32 @@
         });
       };
 
+      const confirmDeleteEntry = (entry) => {
+        if (!confirm('Delete this Spot-the-Right 3 report? This cannot be undone.')) return;
+        const logIndex = practiceLog.indexOf(entry);
+        if (logIndex === -1) return;
+        practiceLog.splice(logIndex, 1);
+        unsavedChanges = true;
+        saveStudySets({ markClean: false });
+        scheduleDriveAutosave();
+        openReportsModal(setName);
+      };
+
       entries.forEach((entry, idx) => {
         const tab = document.createElement('button');
         tab.className = 'report-tab' + (idx === 0 ? ' active' : '');
-        tab.textContent = new Date(entry.practiceDate || Date.now()).toLocaleString();
+        const label = document.createElement('span');
+        label.textContent = new Date(entry.practiceDate || Date.now()).toLocaleString();
+        const close = document.createElement('span');
+        close.className = 'tab-close';
+        close.textContent = '×';
+        close.title = 'Delete report';
+        close.addEventListener('click', (e) => {
+          e.stopPropagation();
+          confirmDeleteEntry(entry);
+        });
+        tab.appendChild(label);
+        tab.appendChild(close);
         tab.addEventListener('click', () => renderEntry(entry, idx));
         tabs.appendChild(tab);
       });
