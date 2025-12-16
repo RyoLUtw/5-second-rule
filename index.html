@@ -170,9 +170,14 @@
       z-index: 10;
     }
     .modal-backdrop.hidden { display: none !important; pointer-events: none; }
-    .modal { background: #fff; border-radius: 12px; padding: 16px; width: min(640px, 94vw); box-shadow: 0 8px 24px rgba(0,0,0,0.2); }
+    .modal { background: #fff; border-radius: 12px; padding: 16px; width: min(640px, 94vw); max-height: 90vh; overflow-y: auto; box-shadow: 0 8px 24px rgba(0,0,0,0.2); }
     .report-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
     .report-item { border: 1px solid var(--border); border-radius: 10px; padding: 10px; background: #f9fafb; }
+    .scrollable-content { max-height: 60vh; overflow-y: auto; }
+    table.report-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+    table.report-table th, table.report-table td { border: 1px solid var(--border); padding: 8px; text-align: left; }
+    table.report-table th { background: #f8fafc; }
+    table.report-table tbody tr:nth-child(even) { background: #fff; }
     @media (max-width: 720px) {
       header { position: sticky; top: 0; }
       .set-header { flex-direction: column; align-items: flex-start; }
@@ -391,11 +396,40 @@
     <div class="modal">
       <h3>Run Summary</h3>
       <div class="small" id="summary-meta"></div>
-      <ul class="report-list" id="summary-rounds"></ul>
+      <div class="scrollable-content">
+        <ul class="report-list" id="summary-rounds"></ul>
+      </div>
       <div class="small" id="summary-totals" style="margin-top:8px;"></div>
       <div class="selection-group" style="margin-top:12px;">
         <button class="btn-primary" id="btn-play-again">Play again (same mode)</button>
         <button class="btn-ghost" id="btn-back">Back to Game Menu</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Reports Modal -->
+  <div id="reports-modal" class="modal-backdrop hidden">
+    <div class="modal">
+      <div class="flex between flex-wrap" style="align-items:center;">
+        <h3 id="reports-title">Spot-the-Right 3 Reports</h3>
+        <button class="btn-ghost" id="btn-close-reports">Close</button>
+      </div>
+      <div class="small" id="reports-hint"></div>
+      <div class="scrollable-content">
+        <table class="report-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Difficulty</th>
+              <th>Rounds</th>
+              <th>Base Points</th>
+              <th>Life Bonus</th>
+              <th>Lives Left</th>
+              <th>Total Points</th>
+            </tr>
+          </thead>
+          <tbody id="reports-table-body"></tbody>
+        </table>
       </div>
     </div>
   </div>
@@ -649,6 +683,7 @@
             <span class="small">${set.items.length} items</span>
             <div class="flex" style="gap:8px;">
               <button class="btn-ghost edit-btn">${set._editing ? 'Done' : 'Edit'}</button>
+              <button class="btn-ghost report-btn">Reports</button>
               <button class="btn-danger">Delete set</button>
             </div>
           </div>
@@ -689,6 +724,11 @@
           set._editing = !set._editing;
           renderStudySets();
           renderSetSelect();
+        });
+
+        const reportBtn = card.querySelector('.report-btn');
+        reportBtn.addEventListener('click', () => {
+          openReportsModal(set.name);
         });
 
         const deleteBtn = card.querySelector('.btn-danger');
@@ -918,6 +958,57 @@
         totals.innerHTML = `Base points: <strong>${data.score}</strong> · Lives left: ${data.lifeLeft}${data.mode === 'survival' ? ` (bonus ${lifeBonus})` : ''}<br>Total points with bonus: <strong>${Math.round((data.score + lifeBonus) * 10) / 10}</strong>`;
       }
       modal.classList.remove('hidden');
+    }
+
+    function openReportsModal(setName) {
+      const modal = document.getElementById('reports-modal');
+      const title = document.getElementById('reports-title');
+      const hint = document.getElementById('reports-hint');
+      const tbody = document.getElementById('reports-table-body');
+      const entries = practiceLog
+        .filter(log => log.mode === 'spot' && (!setName || log.setName === setName))
+        .sort((a, b) => new Date(b.practiceDate || 0) - new Date(a.practiceDate || 0));
+      title.textContent = `Spot-the-Right 3 Reports${setName ? ' — ' + setName : ''}`;
+      hint.textContent = entries.length ? `Showing ${entries.length} Spot-the-Right 3 run${entries.length === 1 ? '' : 's'}.` : 'No Spot-the-Right 3 runs yet.';
+      tbody.innerHTML = '';
+      const formatValue = (val) => {
+        if (val === undefined || val === null || val === '') return '—';
+        if (typeof val === 'number') return Math.round(val * 10) / 10;
+        return val;
+      };
+      if (!entries.length) {
+        const row = document.createElement('tr');
+        const cell = document.createElement('td');
+        cell.colSpan = 7;
+        cell.textContent = 'No Spot-the-Right 3 reports for this set yet.';
+        row.appendChild(cell);
+        tbody.appendChild(row);
+      } else {
+        entries.forEach(entry => {
+          const row = document.createElement('tr');
+          const dateText = new Date(entry.practiceDate || Date.now()).toLocaleString();
+          const cells = [
+            dateText,
+            entry.difficulty || '—',
+            entry.rounds ?? '—',
+            formatValue(entry.baseScore),
+            formatValue(entry.lifeBonus),
+            formatValue(entry.lifeLeft),
+            formatValue(entry.score)
+          ];
+          cells.forEach(value => {
+            const td = document.createElement('td');
+            td.textContent = value;
+            row.appendChild(td);
+          });
+          tbody.appendChild(row);
+        });
+      }
+      modal.classList.remove('hidden');
+    }
+
+    function closeReportsModal() {
+      document.getElementById('reports-modal').classList.add('hidden');
     }
 
     // ---------------------------
@@ -1730,6 +1821,7 @@
     document.getElementById('btn-drive-connect').addEventListener('click', connectDrive);
     document.getElementById('btn-drive-signout').addEventListener('click', signOutDrive);
     document.getElementById('btn-drive-save').addEventListener('click', saveToDrive);
+    document.getElementById('btn-close-reports').addEventListener('click', closeReportsModal);
 
     document.getElementById('set-select').addEventListener('change', (e) => setLastStudySetName(e.target.value));
 
