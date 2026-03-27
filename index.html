@@ -1159,8 +1159,23 @@
       document.getElementById('mode-survival').classList.toggle('active', mode === 'survival');
       document.getElementById('mode-endless').classList.toggle('active', mode === 'endless');
       document.getElementById('mode-spot').classList.toggle('active', mode === 'spot');
+      if (mode !== 'spot') {
+        resetSpotPromptUI();
+      }
       updateLivesVisibility();
       updateStatus();
+    }
+
+    function resetSpotPromptUI() {
+      const optionContainer = document.getElementById('spot-options');
+      optionContainer.classList.add('hidden');
+      optionContainer.innerHTML = '';
+      const submitBtn = document.getElementById('btn-submit-picks');
+      submitBtn.classList.add('hidden');
+      submitBtn.disabled = true;
+      spotOptions = [];
+      spotSelections = new Set();
+      spotRoundResults = null;
     }
 
     function updateTimerDisplay() {
@@ -1338,13 +1353,8 @@
         ...correct.map(text => ({ text, isCorrect: true })),
         ...distractors.map(text => ({ text, isCorrect: false }))
       ]);
+      resetSpotPromptUI();
       spotOptions = options;
-      spotSelections = new Set();
-      spotRoundResults = null;
-      const optionContainer = document.getElementById('spot-options');
-      optionContainer.classList.add('hidden');
-      optionContainer.innerHTML = '';
-      document.getElementById('btn-submit-picks').classList.add('hidden');
     }
 
     function renderSpotOptions() {
