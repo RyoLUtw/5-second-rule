@@ -377,13 +377,13 @@
           <div id="eval-self" class="panel" style="text-align:left;">
             <div id="eval-answers"></div>
             <p class="small" id="eval-answer-note"></p>
-            <h4>How did it go?</h4>
+            <h4 id="eval-performance-heading">How did it go?</h4>
             <div class="selection-group" id="performance-group">
-              <button data-perf="nailed" class="btn-primary">Nailed it (3 answers)</button>
-              <button data-perf="almost" class="btn-ghost">Almost (2 answers)</button>
-              <button data-perf="freeze" class="btn-danger">Brain freeze (0 answers)</button>
+              <button data-perf="nailed" class="btn-primary" id="perf-nailed">Nailed it (3 answers)</button>
+              <button data-perf="almost" class="btn-ghost" id="perf-almost">Almost (2 answers)</button>
+              <button data-perf="freeze" class="btn-danger" id="perf-freeze">Brain freeze (0 answers)</button>
             </div>
-            <h4>Target vocabulary used?</h4>
+            <h4 id="eval-target-heading">Target vocabulary used?</h4>
             <div class="target-control">
               <div class="target-count-display" id="target-count-display">0</div>
               <div class="target-count-controls">
@@ -595,6 +595,18 @@
       if (diff === 'easy') return t('easy');
       if (diff === 'hard') return t('hard');
       return t('medium');
+    }
+
+    function unnamedPromptText() {
+      return currentLanguage === 'zhtw' ? '未命名題目' : 'Unnamed prompt';
+    }
+
+    function sampleAnswersTitle() {
+      return currentLanguage === 'zhtw' ? '範例答案：' : 'Sample answers:';
+    }
+
+    function noSampleAnswersText() {
+      return currentLanguage === 'zhtw' ? '未提供範例答案。' : 'No sample answers provided.';
     }
 
     function restoreDriveSession() {
@@ -843,6 +855,11 @@
       document.getElementById('idle-start-hint').textContent = currentLanguage === 'zhtw'
         ? '請選擇模式、難度與題庫開始遊戲。'
         : 'Select mode, difficulty, and study set to begin.';
+      document.getElementById('eval-performance-heading').textContent = currentLanguage === 'zhtw' ? '這回合表現如何？' : 'How did it go?';
+      document.getElementById('perf-nailed').textContent = currentLanguage === 'zhtw' ? '非常順（3 個答案）' : 'Nailed it (3 answers)';
+      document.getElementById('perf-almost').textContent = currentLanguage === 'zhtw' ? '差一點（2 個答案）' : 'Almost (2 answers)';
+      document.getElementById('perf-freeze').textContent = currentLanguage === 'zhtw' ? '腦袋打結（0 個答案）' : 'Brain freeze (0 answers)';
+      document.getElementById('eval-target-heading').textContent = currentLanguage === 'zhtw' ? '使用了幾個目標字詞？' : 'Target vocabulary used?';
 
       const isZh = currentLanguage === 'zhtw';
       document.getElementById('manage-page').querySelector('h2').textContent = isZh ? '題庫管理' : 'Study Set Management';
@@ -1226,7 +1243,7 @@
             : (round.options || []).filter(opt => opt.isCorrect && opt.chosen).length;
           const correctnessValue = `${correctCount}/3`;
           const cells = [
-            { text: round.prompt || 'Unnamed prompt' },
+            { text: round.prompt || unnamedPromptText() },
             { text: timeSeconds },
             { text: correctnessValue, className: correctCount === 3 ? '' : 'cell-incorrect' },
             ...correctOptions.map(opt => ({ text: opt?.text || '—', chosen: !!opt?.chosen })),
@@ -1519,15 +1536,15 @@
         currentRun.lastIndex = idx;
       }
       const item = setItems[currentRun.lastIndex];
-      document.getElementById('prompt-text').textContent = item.prompt || 'Unnamed prompt';
-      document.getElementById('eval-prompt').textContent = item.prompt || 'Unnamed prompt';
+      document.getElementById('prompt-text').textContent = item.prompt || unnamedPromptText();
+      document.getElementById('eval-prompt').textContent = item.prompt || unnamedPromptText();
       const answerList = Array.isArray(item.answers) ? item.answers : [];
       const targetWords = Array.isArray(item.targetWords) ? item.targetWords : [];
       const targetSet = new Set(targetWords.map(w => w.toLowerCase()));
       const answersText = answerList.length
         ? answerList.map(ans => targetSet.has(ans.toLowerCase()) ? `<strong>${ans}</strong>` : ans).join(', ')
-        : (targetWords.length ? targetWords.map(word => `<strong>${word}</strong>`).join(', ') : 'No sample answers provided.');
-      document.getElementById('eval-answers').innerHTML = `<strong>Sample answers:</strong> ${answersText}`;
+        : (targetWords.length ? targetWords.map(word => `<strong>${word}</strong>`).join(', ') : noSampleAnswersText());
+      document.getElementById('eval-answers').innerHTML = `<strong>${sampleAnswersTitle()}</strong> ${answersText}`;
       document.getElementById('eval-answer-note').textContent = currentLanguage === 'zhtw'
         ? '範例答案中粗體字為目標字詞。'
         : 'Target words are shown in bold within the sample answers.';
@@ -1540,7 +1557,7 @@
       document.getElementById('btn-pause').textContent = t('pause');
       document.getElementById('timer').textContent = currentRun.mode === 'spot' ? '0.0' : Math.ceil(timerRemaining / 1000);
       document.getElementById('progress-inner').style.width = currentRun.mode === 'spot' ? '0%' : '100%';
-      document.getElementById('preview-text').textContent = item.prompt || 'Unnamed prompt';
+      document.getElementById('preview-text').textContent = item.prompt || unnamedPromptText();
       if (currentRun.mode === 'spot') {
         setupSpotOptions(item);
       }
@@ -1609,7 +1626,7 @@
       const points = Math.round(Math.max(0, basePoints * factor) * 10) / 10;
       const lifeDelta = distractorSelections.length === 0 ? 0 : distractorSelections.length === 2 ? -1 : -0.5;
       spotRoundResults = {
-        prompt: currentRun.currentItem?.prompt || 'Unnamed prompt',
+        prompt: currentRun.currentItem?.prompt || unnamedPromptText(),
         options: spotOptions.map((opt, idx) => ({ text: opt.text, isCorrect: opt.isCorrect, chosen: spotSelections.has(idx) })),
         timeMs,
         points,
@@ -1830,7 +1847,7 @@
         currentRun.streak += 1;
       }
       const answers = performanceToCorrect(selectedPerformance);
-      const promptText = currentRun.currentItem?.prompt || 'Unnamed prompt';
+      const promptText = currentRun.currentItem?.prompt || unnamedPromptText();
       currentRun.roundLog.push({
         prompt: promptText,
         answers,
