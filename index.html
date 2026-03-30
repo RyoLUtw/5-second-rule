@@ -261,22 +261,22 @@
     <section id="game-page" class="card hidden">
       <div class="flex between flex-wrap">
         <div>
-          <h2>Game</h2>
-          <p>Pick a study set, difficulty, and mode, then start a run.</p>
+          <h2 id="game-heading">Game</h2>
+          <p id="game-subtitle">Pick a study set, difficulty, and mode, then start a run.</p>
         </div>
       </div>
 
       <div class="card" id="setup-card">
         <div class="flex between flex-wrap">
           <div>
-            <h3>Game Setup</h3>
-            <p class="small">Active study set, difficulty, and game mode.</p>
+            <h3 id="setup-heading">Game Setup</h3>
+            <p class="small" id="setup-subtitle">Active study set, difficulty, and game mode.</p>
           </div>
           <button class="btn-ghost" id="toggle-setup">Collapse</button>
         </div>
         <div id="setup-body" class="grid" style="grid-template-columns: repeat(auto-fit,minmax(260px,1fr)); margin-top:8px;">
           <div class="panel">
-            <h4>Game Mode</h4>
+            <h4 id="game-mode-heading">Game Mode</h4>
             <div class="flex flex-wrap mode-toggle">
               <button id="mode-survival" class="tab-btn">Survival</button>
               <button id="mode-endless" class="tab-btn">Endless Streak</button>
@@ -284,28 +284,28 @@
             </div>
           </div>
           <div class="panel">
-            <label for="set-select">Active Study Set</label>
+            <label for="set-select" id="active-set-label">Active Study Set</label>
             <select id="set-select"></select>
             <div class="small" id="set-hint"></div>
           </div>
           <div class="panel">
-            <h4>Difficulty</h4>
+            <h4 id="difficulty-heading">Difficulty</h4>
             <div class="selection-group" id="difficulty-group">
-              <label><input type="radio" name="difficulty" value="easy"> Easy</label>
-              <label><input type="radio" name="difficulty" value="medium" checked> Medium</label>
-              <label><input type="radio" name="difficulty" value="hard"> Hard</label>
+              <label id="difficulty-easy-label"><input type="radio" name="difficulty" value="easy"> Easy</label>
+              <label id="difficulty-medium-label"><input type="radio" name="difficulty" value="medium" checked> Medium</label>
+              <label id="difficulty-hard-label"><input type="radio" name="difficulty" value="hard"> Hard</label>
             </div>
-            <div class="small">Base points per correct answer: Easy 1 · Medium 2 · Hard 3.</div>
+            <div class="small" id="difficulty-points-note">Base points per correct answer: Easy 1 · Medium 2 · Hard 3.</div>
           </div>
           <div class="panel">
-            <h4>Timer & Lives</h4>
+            <h4 id="timer-lives-heading">Timer & Lives</h4>
             <div class="control-row">
               <div class="stepper">
                 <button class="btn-ghost" id="timer-decrease">-</button>
                 <span class="value" id="timer-value">5s</span>
                 <button class="btn-ghost" id="timer-increase">+</button>
               </div>
-              <span class="small">Timer length</span>
+              <span class="small" id="timer-length-label">Timer length</span>
             </div>
             <div class="control-row" id="lives-row">
               <div class="stepper">
@@ -313,14 +313,14 @@
                 <span class="value" id="lives-value">3</span>
                 <button class="btn-ghost" id="lives-increase">+</button>
               </div>
-              <span class="small">Starting lives (Survival)</span>
+              <span class="small" id="starting-lives-label">Starting lives (Survival)</span>
             </div>
           </div>
         </div>
       </div>
 
       <div class="card">
-        <h4>Best Records</h4>
+        <h4 id="best-records-heading">Best Records</h4>
         <div id="best-survival" class="small">Survival best score: 0</div>
         <div id="best-endless" class="small">Endless best streak: 0 · Best score: 0</div>
       </div>
@@ -332,12 +332,12 @@
         </div>
         <div class="status-metrics">
           <div class="status-metric">
-            <div class="small">Lives</div>
+            <div class="small" id="status-lives-label">Lives</div>
             <div class="status-value hearts" id="lives-display"></div>
             <div class="point-change" id="life-change"></div>
           </div>
           <div class="status-metric">
-            <div class="small">Total Points</div>
+            <div class="small" id="status-total-points-label">Total Points</div>
             <div class="status-value score" id="status-score">0</div>
             <div class="point-change" id="score-change"></div>
           </div>
@@ -347,7 +347,7 @@
 
       <div class="card" id="game-area">
         <div id="state-idle" class="state-block">
-          <p>Select mode, difficulty, and study set to begin.</p>
+          <p id="idle-start-hint">Select mode, difficulty, and study set to begin.</p>
           <div class="selection-group" style="margin-top:12px;">
             <button class="btn-primary" id="btn-start">Start Game</button>
           </div>
@@ -591,6 +591,12 @@
       return I18N[currentLanguage]?.[key] || I18N.en[key] || key;
     }
 
+    function translateDifficulty(diff) {
+      if (diff === 'easy') return t('easy');
+      if (diff === 'hard') return t('hard');
+      return t('medium');
+    }
+
     function restoreDriveSession() {
       const saved = localStorage.getItem(STORAGE_KEYS.driveSession);
       if (!saved) return false;
@@ -813,6 +819,30 @@
       document.getElementById('btn-confirm').textContent = t('confirm');
       document.getElementById('btn-end').textContent = t('endRun');
       document.getElementById('btn-close-reports').textContent = t('reportsClose');
+      document.getElementById('game-heading').textContent = t('tabGame');
+      document.getElementById('game-subtitle').textContent = currentLanguage === 'zhtw'
+        ? '選擇題庫、難度與模式後開始一局。'
+        : 'Pick a study set, difficulty, and mode, then start a run.';
+      document.getElementById('setup-heading').textContent = t('gameSetup');
+      document.getElementById('setup-subtitle').textContent = t('setupHint');
+      document.getElementById('game-mode-heading').textContent = t('gameMode');
+      document.getElementById('active-set-label').textContent = t('activeSet');
+      document.getElementById('difficulty-heading').textContent = t('difficulty');
+      document.getElementById('difficulty-easy-label').lastChild.textContent = ` ${t('easy')}`;
+      document.getElementById('difficulty-medium-label').lastChild.textContent = ` ${t('medium')}`;
+      document.getElementById('difficulty-hard-label').lastChild.textContent = ` ${t('hard')}`;
+      document.getElementById('difficulty-points-note').textContent = currentLanguage === 'zhtw'
+        ? '每題答對基礎分數：簡單 1 · 中等 2 · 困難 3。'
+        : 'Base points per correct answer: Easy 1 · Medium 2 · Hard 3.';
+      document.getElementById('timer-lives-heading').textContent = t('timerLives');
+      document.getElementById('timer-length-label').textContent = currentLanguage === 'zhtw' ? '計時長度' : 'Timer length';
+      document.getElementById('starting-lives-label').textContent = currentLanguage === 'zhtw' ? '起始生命值（生存模式）' : 'Starting lives (Survival)';
+      document.getElementById('best-records-heading').textContent = t('bestRecords');
+      document.getElementById('status-lives-label').textContent = t('lives');
+      document.getElementById('status-total-points-label').textContent = t('totalPoints');
+      document.getElementById('idle-start-hint').textContent = currentLanguage === 'zhtw'
+        ? '請選擇模式、難度與題庫開始遊戲。'
+        : 'Select mode, difficulty, and study set to begin.';
 
       const isZh = currentLanguage === 'zhtw';
       document.getElementById('manage-page').querySelector('h2').textContent = isZh ? '題庫管理' : 'Study Set Management';
@@ -1036,7 +1066,7 @@
       if (!currentRun) return;
       const modeLabel = currentMode === 'survival' ? t('survival') : currentMode === 'endless' ? t('endless') : currentMode === 'spot' ? t('spot') : t('modeNotSelected');
       document.getElementById('status-mode').textContent = modeLabel;
-      document.getElementById('status-difficulty').textContent = `${t('difficulty')}: ${currentRun.difficulty}`;
+      document.getElementById('status-difficulty').textContent = `${t('difficulty')}: ${translateDifficulty(currentRun.difficulty)}`;
       document.getElementById('status-score').textContent = Math.round(currentRun.score * 10) / 10;
       const lifeChangeEl = document.getElementById('life-change');
       const scoreChangeEl = document.getElementById('score-change');
